@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,7 +58,7 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
         val type = object : TypeToken<List<TaskList>>() {}.type
-        gson.fromJson<List<TaskList>>(json, type)
+        gson.fromJson(json, type)
     }
 
 // --- MainActivity ---
@@ -141,7 +142,7 @@ fun TaskCardModern(
 
 // --- Основной экран ---
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToDoAppScreen(
     lists: List<TaskList>,
@@ -154,7 +155,7 @@ fun ToDoAppScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var activeListId by remember {
-        mutableStateOf(lists.firstOrNull()?.id ?: -1)
+        mutableIntStateOf(lists.firstOrNull()?.id ?: -1)
     }
 
     LaunchedEffect(lists) {
@@ -278,8 +279,6 @@ fun ToDoAppScreen(
                     }
                 }
 
-                Divider()
-
                 LazyColumn {
                     items(lists, key = { it.id }) { list ->
                         ListItem(
@@ -303,7 +302,6 @@ fun ToDoAppScreen(
                         )
                     }
                     item {
-                        Divider()
                         ListItem(
                             headlineContent = { Text("Добавить список") },
                             leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -351,7 +349,6 @@ fun ToDoAppScreen(
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             content = { innerPadding ->
                 Box(
                     modifier = Modifier
@@ -392,7 +389,7 @@ fun ToDoAppScreen(
                                 selected = filter == TaskFilter.ALL,
                                 onClick = { filter = TaskFilter.ALL },
                                 label = { Text("Все") },
-                                leadingIcon = { Icon(Icons.Default.List, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             FilterChip(
@@ -489,8 +486,9 @@ fun ToDoAppScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(8.dp)
                             .imePadding()
+                            .navigationBarsPadding()
                             .align(Alignment.BottomCenter)
                     ) {
                         ExtendedFloatingActionButton(
