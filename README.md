@@ -24,7 +24,7 @@
 - Flow (Kotlin Flow) — реактивный поток данных для наблюдения за изменениями в DataStore
 - Material Icons — иконки из набора Material Design (Icons.Default.*)
 ---
-*📦 Установка*
+**📦 Установка**
   1. Клонируйте репозиторий:
        bash
        git clone https://github.com/Denis24-sdk/ToDo-List-in-Kotlin.git
