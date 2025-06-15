@@ -34,8 +34,7 @@
 
 ### Способ 2: Сборка из исходников
 1. **Клонируйте репозиторий**:
-   ```
-   bash
+   ```bash
    git clone https://github.com/Denis24-sdk/ToDo-List-in-Kotlin.git
    cd ToDo-List-in-Kotlin
 
