@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.myfirstapp.ui.theme.MyFirstAppTheme
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
@@ -40,11 +41,9 @@ enum class TaskFilter { ALL, ACTIVE, DONE }
 
 // --- DataStore ---
 
-// Ключ для сохранения списков задач в DataStore
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
 
-// Gson для конвертации списков задач в JSON и обратно
 val gson = Gson()
 
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
@@ -67,8 +66,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Загружаем списки из DataStore, если данных нет — создаём дефолтный список
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
+        val isDarkTheme = mutableStateOf(false)
 
         lifecycleScope.launch {
             applicationContext.loadTaskLists().collectLatest { loadedLists ->
@@ -91,7 +90,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
+            MyFirstAppTheme(darkTheme = isDarkTheme.value) {
                 ToDoAppScreen(
                     lists = listsState.value,
                     onListsChange = { newLists ->
@@ -99,7 +98,9 @@ class MainActivity : ComponentActivity() {
                         lifecycleScope.launch {
                             applicationContext.saveTaskLists(newLists)
                         }
-                    }
+                    },
+                    isDarkTheme = isDarkTheme.value,
+                    onThemeChange = { isDarkTheme.value = it }
                 )
             }
         }
@@ -108,7 +109,6 @@ class MainActivity : ComponentActivity() {
 
 // --- UI компоненты ---
 
-// Отображение отдельной задачи с чекбоксом и кнопкой удаления
 @Composable
 fun TaskCardModern(
     task: Task,
@@ -146,7 +146,9 @@ fun TaskCardModern(
 @Composable
 fun ToDoAppScreen(
     lists: List<TaskList>,
-    onListsChange: (List<TaskList>) -> Unit
+    onListsChange: (List<TaskList>) -> Unit,
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -172,8 +174,6 @@ fun ToDoAppScreen(
     var showDeleteDoneDialog by remember { mutableStateOf(false) }
     var showAddListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
-
-    // Основная логика: добавление, обновление, удаление задач и списков
 
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
@@ -233,7 +233,6 @@ fun ToDoAppScreen(
         }
     }
 
-    // Фильтрация и сортировка задач в зависимости от выбранных настроек
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
         val filtered = when (filter) {
@@ -245,15 +244,12 @@ fun ToDoAppScreen(
         else filtered.sortedByDescending { it.text.lowercase() }
     }
 
-    // --- UI ---
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.fillMaxHeight(0.9f)
             ) {
-                // Боковое меню с перечнем всех списков и кнопкой для создания нового
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -322,7 +318,6 @@ fun ToDoAppScreen(
     ) {
         Scaffold(
             topBar = {
-                // Верхний AppBar с кнопкой открытия бокового меню
                 CenterAlignedTopAppBar(
                     title = {
                         Text(activeList?.name ?: "Нет списков")
@@ -336,9 +331,13 @@ fun ToDoAppScreen(
                             Icon(Icons.Default.Menu, contentDescription = "Меню")
                         }
                     },
-                    // Кнопка подсказки убрана из верхнего бара, чтобы не загромождать интерфейс
                     actions = {
-                        // пусто
+                        IconButton(onClick = { onThemeChange(!isDarkTheme) }) {
+                            Icon(
+                                imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = "Переключить тему"
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -362,7 +361,6 @@ fun ToDoAppScreen(
                     ) {
                         Spacer(Modifier.height(16.dp))
 
-                        // Основной экран: ввод новой задачи, фильтры, список задач и кнопка очистки выполненных
                         OutlinedTextField(
                             value = input,
                             onValueChange = { input = it },
@@ -506,7 +504,6 @@ fun ToDoAppScreen(
         )
     }
 
-    // Диалог подтверждения удаления всех выполненных задач
     if (showDeleteDoneDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDoneDialog = false },
@@ -530,7 +527,6 @@ fun ToDoAppScreen(
         )
     }
 
-    // Диалог для добавления нового списка задач
     if (showAddListDialog) {
         AlertDialog(
             onDismissRequest = {
