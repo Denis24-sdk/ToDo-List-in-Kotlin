@@ -34,7 +34,23 @@ import kotlinx.coroutines.launch
 
 // --- Data ---
 
-data class Task(val id: Int, val text: String, val done: Boolean)
+data class Task(
+    val id: Int,
+    val text: String,
+    val done: Boolean,
+    val subtasks: List<Task> = emptyList()
+) {
+    // Безопасный copy, заменяющий null в subtasks на пустой список
+    fun safeCopy(
+        id: Int = this.id,
+        text: String = this.text,
+        done: Boolean = this.done,
+        subtasks: List<Task>? = this.subtasks
+    ): Task {
+        return copy(subtasks = subtasks ?: emptyList())
+    }
+}
+
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
 
 enum class TaskFilter { ALL, ACTIVE, DONE }
@@ -57,8 +73,43 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
         val type = object : TypeToken<List<TaskList>>() {}.type
-        gson.fromJson(json, type)
+        val lists: List<TaskList> = gson.fromJson(json, type)
+        // Рекурсивно исправляем null в subtasks
+        lists.map { taskList ->
+            taskList.copy(
+                tasks = fixTasks(taskList.tasks)
+            )
+        }
     }
+
+// Рекурсивно исправляем null в subtasks
+fun fixTasks(tasks: List<Task>?): List<Task> {
+    if (tasks == null) return emptyList()
+    return tasks.map { task ->
+        task.safeCopy(subtasks = fixTasks(task.subtasks))
+    }
+}
+
+// --- Вспомогательные функции для работы с задачами и подзадачами ---
+
+fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
+    return tasks.map { task ->
+        if (task.id == updatedTask.id) {
+            updatedTask.safeCopy()
+        } else {
+            task.safeCopy(subtasks = updateTaskInList(task.subtasks, updatedTask))
+        }
+    }
+}
+
+fun deleteTaskFromList(tasks: List<Task>, taskId: Int): List<Task> {
+    return tasks.filter { it.id != taskId }
+        .map { it.safeCopy(subtasks = deleteTaskFromList(it.subtasks, taskId)) }
+}
+
+fun collectAllIds(task: Task): List<Int> {
+    return listOf(task.id) + task.subtasks.flatMap { collectAllIds(it) }
+}
 
 // --- MainActivity ---
 
@@ -110,37 +161,123 @@ class MainActivity : ComponentActivity() {
 // --- UI компоненты ---
 
 @Composable
-fun TaskCardModern(
+fun TaskItem(
     task: Task,
-    onCheckedChange: (Boolean) -> Unit,
-    onDelete: () -> Unit
+    onCheckedChange: (Task) -> Unit,
+    onDelete: (Task) -> Unit,
+    onAddSubtask: (Task, String) -> Unit,
+    onTextChange: (Task) -> Unit,
+    modifier: Modifier = Modifier,
+    level: Int = 0
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(4.dp)
-    ) {
+    var showAddSubtaskField by remember { mutableStateOf(false) }
+    var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(TextFieldValue(task.text)) }
+
+    Column(modifier = modifier.padding(start = (level * 16).dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
             Checkbox(
                 checked = task.done,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = { checked -> onCheckedChange(task.copy(done = checked)) }
             )
             Spacer(Modifier.width(8.dp))
-            Text(
-                text = task.text,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge
-            )
-            IconButton(onClick = onDelete) {
+
+            if (isEditing) {
+                OutlinedTextField(
+                    value = editText,
+                    onValueChange = { editText = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    trailingIcon = {
+                        Row {
+                            IconButton(onClick = {
+                                val newText = editText.text.trim()
+                                if (newText.isNotBlank() && newText != task.text) {
+                                    onTextChange(task.copy(text = newText))
+                                }
+                                isEditing = false
+                            }) {
+                                Icon(Icons.Default.Check, contentDescription = "Сохранить")
+                            }
+                            IconButton(onClick = {
+                                isEditing = false
+                                editText = TextFieldValue(task.text)
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Отмена")
+                            }
+                        }
+                    }
+                )
+            } else {
+                Text(
+                    text = task.text,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            isEditing = true
+                            editText = TextFieldValue(task.text)
+                        },
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+
+            IconButton(onClick = { onDelete(task) }) {
                 Icon(Icons.Default.Delete, contentDescription = "Удалить задачу")
             }
+            IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
+                Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+            }
+        }
+
+        if (showAddSubtaskField) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 32.dp, bottom = 8.dp)
+            ) {
+                OutlinedTextField(
+                    value = subtaskInput,
+                    onValueChange = { subtaskInput = it },
+                    placeholder = { Text("Новая подзадача") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                IconButton(
+                    onClick = {
+                        if (subtaskInput.text.isNotBlank()) {
+                            onAddSubtask(task, subtaskInput.text.trim())
+                            subtaskInput = TextFieldValue("")
+                            showAddSubtaskField = false
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "Подтвердить")
+                }
+                IconButton(onClick = {
+                    showAddSubtaskField = false
+                    subtaskInput = TextFieldValue("")
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Отмена")
+                }
+            }
+        }
+
+        task.subtasks.forEach { subtask ->
+            TaskItem(
+                task = subtask,
+                onCheckedChange = onCheckedChange,
+                onDelete = onDelete,
+                onAddSubtask = onAddSubtask,
+                onTextChange = onTextChange,
+                level = level + 1
+            )
         }
     }
 }
-
-// --- Основной экран ---
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,7 +315,7 @@ fun ToDoAppScreen(
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
         val currentTasks = activeList.tasks
-        val currentIds = currentTasks.map { it.id }.toSet()
+        val currentIds = currentTasks.flatMap { collectAllIds(it) }.toSet()
         var newId = 1
         while (newId in currentIds) newId++
         val newTask = Task(newId, text.trim(), false)
@@ -192,9 +329,7 @@ fun ToDoAppScreen(
 
     fun updateTask(task: Task) {
         val list = activeList ?: return
-        val updatedTasks = list.tasks.map {
-            if (it.id == task.id) task else it
-        }
+        val updatedTasks = updateTaskInList(list.tasks, task)
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
@@ -202,7 +337,28 @@ fun ToDoAppScreen(
 
     fun deleteTask(task: Task) {
         val list = activeList ?: return
-        val updatedTasks = list.tasks.filter { it.id != task.id }
+        val updatedTasks = deleteTaskFromList(list.tasks, task.id)
+        val updatedList = list.copy(tasks = updatedTasks)
+        val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
+        onListsChange(updatedLists)
+    }
+
+    fun addSubtask(parentTask: Task, text: String) {
+        val list = activeList ?: return
+        val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
+        var newId = 1
+        while (newId in currentIds) newId++
+        val newSubtask = Task(newId, text, false)
+
+        fun addSubtaskRec(tasks: List<Task>): List<Task> = tasks.map { task ->
+            if (task.id == parentTask.id) {
+                task.safeCopy(subtasks = task.subtasks + newSubtask)
+            } else {
+                task.safeCopy(subtasks = addSubtaskRec(task.subtasks))
+            }
+        }
+
+        val updatedTasks = addSubtaskRec(list.tasks)
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
@@ -210,7 +366,13 @@ fun ToDoAppScreen(
 
     fun deleteDoneTasks() {
         val list = activeList ?: return
-        val updatedTasks = list.tasks.filter { !it.done }
+
+        fun filterDone(tasks: List<Task>): List<Task> {
+            return tasks.filter { !it.done }
+                .map { it.safeCopy(subtasks = filterDone(it.subtasks)) }
+        }
+
+        val updatedTasks = filterDone(list.tasks)
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
@@ -470,10 +632,12 @@ fun ToDoAppScreen(
                                         enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
                                         exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
                                     ) {
-                                        TaskCardModern(
+                                        TaskItem(
                                             task = task,
-                                            onCheckedChange = { done -> updateTask(task.copy(done = done)) },
-                                            onDelete = { deleteTask(task) }
+                                            onCheckedChange = { updatedTask -> updateTask(updatedTask) },
+                                            onDelete = { deleteTask(it) },
+                                            onAddSubtask = { parent, text -> addSubtask(parent, text) },
+                                            onTextChange = { updatedTask -> updateTask(updatedTask) }
                                         )
                                     }
                                 }
