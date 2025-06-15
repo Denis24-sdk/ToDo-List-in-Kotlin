@@ -29,13 +29,13 @@
 
 ## 📦 Установка
 
-### Способ 1: Скачать APK
-[![Download APK](https://img.shields.io/badge/Download-Latest-brightgreen?style=for-the-badge&logo=android)](https://github.com/Denis24-sdk/ToDo-List-in-Kotlin/releases/latest/download/app-release.apk)  
-*Требуется Android 8.0+*
+### Способ 1: Скачать APK из таблицы обновлений
+*Требуется Android 5.0+*
 
 ### Способ 2: Сборка из исходников
 1. **Клонируйте репозиторий**:
-   ```bash
+   ```
+   bash
    git clone https://github.com/Denis24-sdk/ToDo-List-in-Kotlin.git
    cd ToDo-List-in-Kotlin
 
