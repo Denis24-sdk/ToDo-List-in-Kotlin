@@ -28,10 +28,14 @@
 - Material Icons — иконки из набора Material Design (Icons.Default.*)
 
 ## 📦 Установка
-Скачайте Apk-файл или
-  1. Клонируйте репозиторий:
-       bash
-       git clone https://github.com/Denis24-sdk/ToDo-List-in-Kotlin.git
-  2. Откройте проект в Android Studio
-  3. Соберите APK или запустите через эмулятор
+
+### Способ 1: Скачать APK
+[![Download APK](https://img.shields.io/badge/Download-Latest-brightgreen?style=for-the-badge&logo=android)](https://github.com/Denis24-sdk/ToDo-List-in-Kotlin/releases/latest/download/app-release.apk)  
+*Требуется Android 8.0+*
+
+### Способ 2: Сборка из исходников
+1. **Клонируйте репозиторий**:
+   ```bash
+   git clone https://github.com/Denis24-sdk/ToDo-List-in-Kotlin.git
+   cd ToDo-List-in-Kotlin
 
