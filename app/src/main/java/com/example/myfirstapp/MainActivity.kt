@@ -252,8 +252,12 @@ fun TaskItem(
                     tint = if (taskIdPendingDelete == task.id) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
-                Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+
+            // Показываем кнопку добавления подзадачи только если уровень вложенности < 2
+            if (level < 2) {
+                IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
+                    Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+                }
             }
         }
 
@@ -304,6 +308,7 @@ fun TaskItem(
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
