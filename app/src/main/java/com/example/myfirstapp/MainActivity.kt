@@ -60,6 +60,14 @@ data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
 
 enum class TaskFilter { ALL, ACTIVE, DONE }
 
+enum class SortOption(val displayName: String) {
+    A_TO_Z("А-Я"),
+    Z_TO_A("Я-А"),
+    NEWEST_FIRST("Сначала новые"),
+    OLDEST_FIRST("Сначала старые"),
+    UNCOMPLETED_FIRST("Сначала невыполненные")
+}
+
 // --- DataStore ---
 
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
@@ -85,6 +93,7 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
             )
         }
     }
+
 
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
@@ -324,10 +333,11 @@ fun ToDoAppScreen(
 
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(TaskFilter.ALL) }
-    var sortAsc by remember { mutableStateOf(true) }
     var showDeleteDoneDialog by remember { mutableStateOf(false) }
     var showAddListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
+    var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
+    var sortExpanded by remember { mutableStateOf(false) }
 
     // Для логики двойного нажатия удаления
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
@@ -426,13 +436,22 @@ fun ToDoAppScreen(
 
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
+
         val filtered = when (filter) {
             TaskFilter.ALL -> activeList.tasks
             TaskFilter.ACTIVE -> activeList.tasks.filter { !it.done }
             TaskFilter.DONE -> activeList.tasks.filter { it.done }
         }
-        return if (sortAsc) filtered.sortedBy { it.text.lowercase() }
-        else filtered.sortedByDescending { it.text.lowercase() }
+
+        return when (selectedSortOption) {
+            SortOption.A_TO_Z -> filtered.sortedBy { it.text.lowercase() }
+            SortOption.Z_TO_A -> filtered.sortedByDescending { it.text.lowercase() }
+            SortOption.NEWEST_FIRST -> filtered.sortedByDescending { it.id }
+            SortOption.OLDEST_FIRST -> filtered.sortedBy { it.id }
+            SortOption.UNCOMPLETED_FIRST -> filtered.sortedWith(
+                compareBy<Task> { it.done }.thenBy { it.text.lowercase() }
+            )
+        }
     }
 
     // Обработка клика по иконке удаления с двойным нажатием
@@ -584,7 +603,7 @@ fun ToDoAppScreen(
                             }
                         )
 
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(4.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -610,18 +629,45 @@ fun ToDoAppScreen(
                                 label = { Text("Выполненные") },
                                 leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) }
                             )
+                        }
 
-                            Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.height(4.dp))
 
-                            IconButton(onClick = { sortAsc = !sortAsc }) {
-                                Icon(
-                                    imageVector = Icons.Default.SortByAlpha,
-                                    contentDescription = "Сортировка"
-                                )
+                        // Выбор сортировки
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Сортировка:", modifier = Modifier.padding(end = 8.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedButton(
+                                    onClick = { sortExpanded = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        selectedSortOption.displayName,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                }
+                                DropdownMenu(
+                                    expanded = sortExpanded,
+                                    onDismissRequest = { sortExpanded = false }
+                                ) {
+                                    SortOption.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.displayName) },
+                                            onClick = {
+                                                selectedSortOption = option
+                                                sortExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(4.dp))
 
                         if (activeList == null) {
                             Box(
@@ -647,7 +693,7 @@ fun ToDoAppScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Text("Удалить все выполненные")
                             }
-                            Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(4.dp))
                         }
 
                         val displayedTasks = filteredSortedTasks()
@@ -778,4 +824,3 @@ fun ToDoAppScreen(
         )
     }
 }
-
