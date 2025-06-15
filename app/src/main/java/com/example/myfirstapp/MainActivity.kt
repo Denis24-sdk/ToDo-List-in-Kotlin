@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 // --- Data ---
 
@@ -40,7 +41,6 @@ data class Task(
     val done: Boolean,
     val subtasks: List<Task> = emptyList()
 ) {
-    // Безопасный copy, заменяющий null в subtasks на пустой список
     fun safeCopy(
         id: Int = this.id,
         text: String = this.text,
@@ -54,7 +54,6 @@ data class Task(
             subtasks = subtasks ?: emptyList()
         )
     }
-
 }
 
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
@@ -80,7 +79,6 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
         val type = object : TypeToken<List<TaskList>>() {}.type
         val lists: List<TaskList> = gson.fromJson(json, type)
-        // Рекурсивно исправляем null в subtasks
         lists.map { taskList ->
             taskList.copy(
                 tasks = fixTasks(taskList.tasks)
@@ -88,7 +86,6 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
         }
     }
 
-// Рекурсивно исправляем null в subtasks
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task ->
@@ -96,7 +93,7 @@ fun fixTasks(tasks: List<Task>?): List<Task> {
     }
 }
 
-// --- Вспомогательные функции для работы с задачами и подзадачами ---
+// --- Вспомогательные функции ---
 
 fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
     return tasks.map { task ->
@@ -164,15 +161,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- UI компоненты ---
+// --- UI ---
 
 @Composable
 fun TaskItem(
     task: Task,
     onCheckedChange: (Task) -> Unit,
-    onDelete: (Task) -> Unit,
+    onDeleteRequest: (Task) -> Unit,
     onAddSubtask: (Task, String) -> Unit,
     onTextChange: (Task) -> Unit,
+    taskIdPendingDelete: Int?,
+    onDeleteIconClick: (Task) -> Unit,
     modifier: Modifier = Modifier,
     level: Int = 0
 ) {
@@ -188,7 +187,11 @@ fun TaskItem(
         ) {
             Checkbox(
                 checked = task.done,
-                onCheckedChange = { checked -> onCheckedChange(task.copy(done = checked)) }
+                onCheckedChange = { checked -> onCheckedChange(task.copy(done = checked)) },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             )
             Spacer(Modifier.width(8.dp))
 
@@ -228,12 +231,17 @@ fun TaskItem(
                             isEditing = true
                             editText = TextFieldValue(task.text)
                         },
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (task.done) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            IconButton(onClick = { onDelete(task) }) {
-                Icon(Icons.Default.Delete, contentDescription = "Удалить задачу")
+            IconButton(onClick = { onDeleteIconClick(task) }) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Удалить задачу",
+                    tint = if (taskIdPendingDelete == task.id) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
@@ -250,7 +258,8 @@ fun TaskItem(
                     onValueChange = { subtaskInput = it },
                     placeholder = { Text("Новая подзадача") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium
                 )
                 IconButton(
                     onClick = {
@@ -276,9 +285,11 @@ fun TaskItem(
             TaskItem(
                 task = subtask,
                 onCheckedChange = onCheckedChange,
-                onDelete = onDelete,
+                onDeleteRequest = onDeleteRequest,
                 onAddSubtask = onAddSubtask,
                 onTextChange = onTextChange,
+                taskIdPendingDelete = taskIdPendingDelete,
+                onDeleteIconClick = onDeleteIconClick,
                 level = level + 1
             )
         }
@@ -318,6 +329,17 @@ fun ToDoAppScreen(
     var showAddListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
 
+    // Для логики двойного нажатия удаления
+    var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
+
+    // Сброс taskIdPendingDelete через 3 секунды
+    LaunchedEffect(taskIdPendingDelete) {
+        if (taskIdPendingDelete != null) {
+            delay(2000)
+            taskIdPendingDelete = null
+        }
+    }
+
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
         val currentTasks = activeList.tasks
@@ -347,6 +369,7 @@ fun ToDoAppScreen(
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
+        taskIdPendingDelete = null
     }
 
     fun addSubtask(parentTask: Task, text: String) {
@@ -411,6 +434,22 @@ fun ToDoAppScreen(
         return if (sortAsc) filtered.sortedBy { it.text.lowercase() }
         else filtered.sortedByDescending { it.text.lowercase() }
     }
+
+    // Обработка клика по иконке удаления с двойным нажатием
+    fun onDeleteIconClick(task: Task) {
+        if (taskIdPendingDelete == task.id) {
+            scope.launch {
+                snackbarHostState.currentSnackbarData?.dismiss()
+                deleteTask(task)
+            }
+        } else {
+            taskIdPendingDelete = task.id
+            scope.launch {
+                snackbarHostState.showSnackbar("Нажмите повторно для удаления")
+            }
+        }
+    }
+
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -641,9 +680,11 @@ fun ToDoAppScreen(
                                         TaskItem(
                                             task = task,
                                             onCheckedChange = { updatedTask -> updateTask(updatedTask) },
-                                            onDelete = { deleteTask(it) },
+                                            onDeleteRequest = { deleteTask(it) },
                                             onAddSubtask = { parent, text -> addSubtask(parent, text) },
-                                            onTextChange = { updatedTask -> updateTask(updatedTask) }
+                                            onTextChange = { updatedTask -> updateTask(updatedTask) },
+                                            taskIdPendingDelete = taskIdPendingDelete,
+                                            onDeleteIconClick = { onDeleteIconClick(it) }
                                         )
                                     }
                                 }
