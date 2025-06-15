@@ -33,7 +33,5 @@
        git clone https://github.com/Denis24-sdk/ToDo-List-in-Kotlin.git
   2. Откройте проект в Android Studio
   3. Соберите APK или запустите через эмулятор
+Или скачайте Apk-файл
 
-
-MIT License
-Copyright (c) 2025 Магуров Денис
