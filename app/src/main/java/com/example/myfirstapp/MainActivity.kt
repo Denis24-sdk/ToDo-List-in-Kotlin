@@ -47,8 +47,14 @@ data class Task(
         done: Boolean = this.done,
         subtasks: List<Task>? = this.subtasks
     ): Task {
-        return copy(subtasks = subtasks ?: emptyList())
+        return copy(
+            id = id,
+            text = text,
+            done = done,
+            subtasks = subtasks ?: emptyList()
+        )
     }
+
 }
 
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
