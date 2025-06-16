@@ -75,4 +75,6 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.androidx.datastore.preferences.v100)
     implementation(libs.androidx.material3.v110)
+    implementation (libs.androidx.foundation)
+
 }

@@ -33,6 +33,12 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.unit.Dp
+
+
 // --- Data ---
 
 data class Task(
@@ -182,27 +188,101 @@ fun TaskItem(
     taskIdPendingDelete: Int?,
     onDeleteIconClick: (Task) -> Unit,
     modifier: Modifier = Modifier,
-    level: Int = 0
+    level: Int = 0,
+    isLast: Boolean = true,
+    hasNextSiblingAtLevel: List<Boolean> = emptyList(),
+    leftIndents: List<Dp> = listOf(0.dp, 15.9.dp, 26.7.dp)
 ) {
     var showAddSubtaskField by remember { mutableStateOf(false) }
     var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
     var isEditing by remember { mutableStateOf(false) }
     var editText by remember { mutableStateOf(TextFieldValue(task.text)) }
 
-    Column(modifier = modifier.padding(start = (level * 16).dp)) {
+    val lineColor = MaterialTheme.colorScheme.primary
+    val lineStrokeWidth = 5f
+    val itemHeight = 48.dp
+
+    val indent = if (level < leftIndents.size) leftIndents[level] else leftIndents.last()
+
+    Column(
+        modifier = modifier.padding(start = indent)
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .height(itemHeight)
+                .fillMaxWidth()
         ) {
+            Box(
+                modifier = Modifier
+                    .width(if (level == 0) 0.dp else leftIndents.getOrElse(level) { 0.dp })
+                    .fillMaxHeight()
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val heightPx = size.height
+                    val halfHeight = heightPx / 2f
+                    val indentPx = indent.toPx()
+
+                    // Рисуем вертикальные линии для уровней выше текущего, но
+                    // только если уровень >= 2 (под-подзадачи и глубже)
+                    hasNextSiblingAtLevel.forEachIndexed { idx, hasNextSibling ->
+                        if (idx >= 1) { // рисуем вертикальные линии только начиная с 2-го уровня вложенности
+
+                            val shiftPx = 70f // смещение влево
+                            val x = (if (idx < leftIndents.size) leftIndents[idx].toPx() / 2f else indentPx / 2f) - shiftPx
+
+                            val extraTop = 0f // выход над канвас
+                            val extraBottom = 130f // выход под канвас
+
+                            if (hasNextSibling) {
+                                drawLine(
+                                    color = lineColor,
+                                    strokeWidth = lineStrokeWidth,
+                                    start = Offset(x, -extraTop),
+                                    end = Offset(x, heightPx + extraBottom),
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        }
+                    }
+
+                    if (level > 0) {
+                        val x = indentPx / 2f
+                        // Горизонтальная линия к чекбоксу
+                        drawLine(
+                            color = lineColor,
+                            strokeWidth = lineStrokeWidth,
+                            start = Offset(x, halfHeight),
+                            end = Offset(indentPx, halfHeight),
+                            cap = StrokeCap.Round
+                        )
+
+                        // Вертикальная линия текущего уровня
+                        if (isLast) {
+                            drawLine(
+                                color = lineColor,
+                                strokeWidth = lineStrokeWidth,
+                                start = Offset(x, 0f),
+                                end = Offset(x, halfHeight),
+                                cap = StrokeCap.Round
+                            )
+                        } else {
+                            drawLine(
+                                color = lineColor,
+                                strokeWidth = lineStrokeWidth,
+                                start = Offset(x, 0f),
+                                end = Offset(x, heightPx),
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                }
+            }
+
             Checkbox(
                 checked = task.done,
-                onCheckedChange = { checked -> onCheckedChange(task.copy(done = checked)) },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = MaterialTheme.colorScheme.primary,
-                    uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                onCheckedChange = { onCheckedChange(task.copy(done = it)) }
             )
-            Spacer(Modifier.width(8.dp))
 
             if (isEditing) {
                 OutlinedTextField(
@@ -229,8 +309,7 @@ fun TaskItem(
                                 Icon(Icons.Default.Close, contentDescription = "Отмена")
                             }
                         }
-                    }
-                )
+                    })
             } else {
                 Text(
                     text = task.text,
@@ -253,7 +332,6 @@ fun TaskItem(
                 )
             }
 
-            // Показываем кнопку добавления подзадачи только если уровень вложенности < 2
             if (level < 2) {
                 IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
@@ -264,7 +342,7 @@ fun TaskItem(
         if (showAddSubtaskField) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 32.dp, bottom = 8.dp)
+                modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
             ) {
                 OutlinedTextField(
                     value = subtaskInput,
@@ -294,7 +372,9 @@ fun TaskItem(
             }
         }
 
-        task.subtasks.forEach { subtask ->
+        val childCount = task.subtasks.size
+        task.subtasks.forEachIndexed { index, subtask ->
+            val hasNextSibling = index < childCount - 1
             TaskItem(
                 task = subtask,
                 onCheckedChange = onCheckedChange,
@@ -303,11 +383,17 @@ fun TaskItem(
                 onTextChange = onTextChange,
                 taskIdPendingDelete = taskIdPendingDelete,
                 onDeleteIconClick = onDeleteIconClick,
-                level = level + 1
+                level = level + 1,
+                isLast = !hasNextSibling,
+                hasNextSiblingAtLevel = hasNextSiblingAtLevel + hasNextSibling,
+                leftIndents = leftIndents
             )
         }
     }
 }
+
+
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -829,3 +915,4 @@ fun ToDoAppScreen(
         )
     }
 }
+
