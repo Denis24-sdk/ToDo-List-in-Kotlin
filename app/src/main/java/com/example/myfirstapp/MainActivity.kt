@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
+import com.example.myfirstapp.ui.theme.*
+
 
 // --- Data ---
 data class Task(
@@ -61,11 +63,8 @@ data class Task(
         )
     }
 }
-
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
-
 enum class TaskFilter { ALL, ACTIVE, DONE }
-
 enum class SortOption(val displayName: String) {
     A_TO_Z("А-Я"),
     Z_TO_A("Я-А"),
@@ -73,19 +72,16 @@ enum class SortOption(val displayName: String) {
     OLDEST_FIRST("Сначала старые"),
     UNCOMPLETED_FIRST("Сначала невыполненные")
 }
-
 // --- DataStore ---
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
 val gson = Gson()
-
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
     val json = gson.toJson(lists)
     dataStore.edit { prefs ->
         prefs[TASK_LISTS_KEY] = json
     }
 }
-
 fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
@@ -97,7 +93,6 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
             )
         }
     }
-
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task ->
@@ -115,16 +110,13 @@ fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
         }
     }
 }
-
 fun deleteTaskFromList(tasks: List<Task>, taskId: Int): List<Task> {
     return tasks.filter { it.id != taskId }
         .map { it.safeCopy(subtasks = deleteTaskFromList(it.subtasks, taskId)) }
 }
-
 fun collectAllIds(task: Task): List<Int> {
     return listOf(task.id) + task.subtasks.flatMap { collectAllIds(it) }
 }
-
 // --- New recursive function to propagate "done" state bottom-up ---
 fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
     return tasks.map { task ->
@@ -134,13 +126,26 @@ fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
         task.safeCopy(done = doneNew, subtasks = updatedSubtasks)
     }
 }
-
 // --- MainActivity ---
 class MainActivity : ComponentActivity() {
+    // Список тем для цикличного переключения
+    private val themeList = listOf(
+        BlueColors,
+        UniversalDarkColors,
+        RedColors,
+        GreenColors,
+        YellowColors,
+        OrangeColors,
+        PurpleColors,
+        TealColors,
+        BrownColors
+    )
+    private var themeIndex = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
-        val isDarkTheme = mutableStateOf(false)
+        val currentTheme = mutableStateOf(themeList[0])
         lifecycleScope.launch {
             applicationContext.loadTaskLists().collectLatest { loadedLists ->
                 if (loadedLists.isNotEmpty()) {
@@ -161,7 +166,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
-            MyFirstAppTheme(darkTheme = isDarkTheme.value) {
+            MyFirstAppTheme(colorScheme = currentTheme.value) {
                 ToDoAppScreen(
                     lists = listsState.value,
                     onListsChange = { newLists ->
@@ -170,14 +175,16 @@ class MainActivity : ComponentActivity() {
                             applicationContext.saveTaskLists(newLists)
                         }
                     },
-                    isDarkTheme = isDarkTheme.value,
-                    onThemeChange = { isDarkTheme.value = it }
+                    currentTheme = currentTheme.value,
+                    onThemeChange = {
+                        themeIndex = (themeIndex + 1) % themeList.size
+                        currentTheme.value = themeList[themeIndex]
+                    }
                 )
             }
         }
     }
 }
-
 // --- UI ---
 @Composable
 fun TaskItem(
@@ -378,17 +385,15 @@ fun TaskItem(
 fun ToDoAppScreen(
     lists: List<TaskList>,
     onListsChange: (List<TaskList>) -> Unit,
-    isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit
+    currentTheme: ColorScheme,
+    onThemeChange: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    var activeListId by remember {
-        mutableIntStateOf(lists.firstOrNull()?.id ?: -1)
-    }
+    var activeListId by remember { mutableIntStateOf(lists.firstOrNull()?.id ?: -1) }
     var editingTaskId by remember { mutableStateOf<Int?>(null) }
     var showDeleteDoneDialog by remember { mutableStateOf(false) }
     var showAddListDialog by remember { mutableStateOf(false) }
@@ -401,6 +406,7 @@ fun ToDoAppScreen(
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
@@ -429,20 +435,15 @@ fun ToDoAppScreen(
         keyboardController?.hide()
         editingTaskId = null
     }
-
     fun updateTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = updateTaskInList(list.tasks, task)
-
-        // Пропагируем done статус задачи с учетом подзадач
         val propagatedTasks = propagateTaskDoneState(updatedTasks)
-
         val updatedList = list.copy(tasks = propagatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
         editingTaskId = null
     }
-
     fun deleteTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = deleteTaskFromList(list.tasks, task.id)
@@ -452,7 +453,6 @@ fun ToDoAppScreen(
         taskIdPendingDelete = null
         editingTaskId = null
     }
-
     fun addSubtask(parentTask: Task, text: String) {
         val list = activeList ?: return
         val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
@@ -472,7 +472,6 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
-
     fun deleteDoneTasks() {
         val list = activeList ?: return
         fun filterDone(tasks: List<Task>): List<Task> {
@@ -485,7 +484,6 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
-
     fun addTaskList(name: String) {
         if (name.isBlank()) return
         val newId = (lists.maxOfOrNull { it.id } ?: 0) + 1
@@ -495,7 +493,6 @@ fun ToDoAppScreen(
         activeListId = newId
         editingTaskId = null
     }
-
     fun deleteTaskListConfirmed(id: Int) {
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
@@ -504,12 +501,10 @@ fun ToDoAppScreen(
         }
         editingTaskId = null
     }
-
     fun deleteTaskListRequest(id: Int) {
         deleteListId = id
         showDeleteListDialog = true
     }
-
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
         val filtered = when (filter) {
@@ -527,7 +522,6 @@ fun ToDoAppScreen(
             )
         }
     }
-
     fun onDeleteIconClick(task: Task) {
         if (taskIdPendingDelete == task.id) {
             scope.launch {
@@ -541,7 +535,6 @@ fun ToDoAppScreen(
             }
         }
     }
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -629,9 +622,9 @@ fun ToDoAppScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { onThemeChange(!isDarkTheme) }) {
+                        IconButton(onClick = { onThemeChange() }) {
                             Icon(
-                                imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                imageVector = if (currentTheme == UniversalDarkColors) Icons.Default.LightMode else Icons.Default.DarkMode,
                                 contentDescription = "Переключить тему"
                             )
                         }
