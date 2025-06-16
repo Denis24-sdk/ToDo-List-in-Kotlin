@@ -32,6 +32,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -72,17 +75,20 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -207,7 +213,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
         val currentTheme = mutableStateOf(themeList[0])
-        val activeListIdState = mutableStateOf(-1)
+        val activeListIdState = mutableIntStateOf(-1)
         lifecycleScope.launch {
             val loadedLists = applicationContext.loadTaskLists().firstOrNull() ?: emptyList()
             val themeIndex = applicationContext.readActiveThemeIndex().firstOrNull() ?: 0
@@ -220,7 +226,7 @@ class MainActivity : ComponentActivity() {
                 ))
             )
             listsState.value = listsToUse
-            activeListIdState.value = if (listsToUse.any { it.id == savedActiveListId })
+            activeListIdState.intValue = if (listsToUse.any { it.id == savedActiveListId })
                 savedActiveListId else listsToUse.firstOrNull()?.id ?: -1
             currentTheme.value = themeList.getOrElse(themeIndex) { themeList[0] }
         }
@@ -238,9 +244,9 @@ class MainActivity : ComponentActivity() {
                         currentTheme.value = newTheme
                         lifecycleScope.launch { applicationContext.saveActiveThemeIndex(newIndex) }
                     },
-                    activeListId = activeListIdState.value,
+                    activeListId = activeListIdState.intValue,
                     onActiveListIdChange = { newActiveListId ->
-                        activeListIdState.value = newActiveListId
+                        activeListIdState.intValue = newActiveListId
                         lifecycleScope.launch { applicationContext.saveActiveListId(newActiveListId) }
                     }
                 )
@@ -289,33 +295,24 @@ fun TaskItem(
                     val indentPx = indent.toPx()
                     if (level == 1) {
                         val x = indentPx / 2f
-                        drawLine(
-                            color = lineColor,
-                            strokeWidth = lineStrokeWidth,
+                        drawLine(color = lineColor, strokeWidth = lineStrokeWidth,
                             start = Offset(x, halfHeight),
                             end = Offset(indentPx + 37f, halfHeight),
-                            cap = StrokeCap.Round
-                        )
-                        drawLine(
-                            color = lineColor,
-                            strokeWidth = lineStrokeWidth,
+                            cap = StrokeCap.Round)
+                        drawLine(color = lineColor, strokeWidth = lineStrokeWidth,
                             start = Offset(x, if (isLast) -35f else -35f),
                             end = Offset(x, if (isLast) halfHeight else heightPx),
-                            cap = StrokeCap.Round
-                        )
+                            cap = StrokeCap.Round)
                     }
                 }
             }
-            Checkbox(
-                checked = task.done,
-                onCheckedChange = { checked ->
-                    fun setDoneRec(task: Task, done: Boolean): Task {
-                        return task.safeCopy(done = done, subtasks = task.subtasks.map { setDoneRec(it, done) })
-                    }
-                    val updatedTask = setDoneRec(task, checked)
-                    onCheckedChange(updatedTask)
+            Checkbox(checked = task.done, onCheckedChange = { checked ->
+                fun setDoneRec(task: Task, done: Boolean): Task {
+                    return task.safeCopy(done = done, subtasks = task.subtasks.map { setDoneRec(it, done) })
                 }
-            )
+                val updatedTask = setDoneRec(task, checked)
+                onCheckedChange(updatedTask)
+            })
             if (isEditing) {
                 OutlinedTextField(
                     value = editText,
@@ -343,8 +340,7 @@ fun TaskItem(
                         }
                     })
             } else {
-                Text(
-                    text = task.text,
+                Text(text = task.text,
                     modifier = Modifier.weight(1f).clickable {
                         onEditingTaskChange(task.id)
                         editText = TextFieldValue(task.text)
@@ -369,27 +365,24 @@ fun TaskItem(
             }
         }
         if (showAddSubtaskField) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)) {
                 OutlinedTextField(
                     value = subtaskInput,
                     onValueChange = { subtaskInput = it },
-                    placeholder = { Text("Новая подзадача", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)) },
+                    placeholder = {
+                        Text("Новая подзадача", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    },
                     modifier = Modifier.weight(1f).height(54.dp),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                     singleLine = true,
                 )
-                IconButton(
-                    onClick = {
-                        if (subtaskInput.text.isNotBlank()) {
-                            onAddSubtask(task, subtaskInput.text.trim())
-                            subtaskInput = TextFieldValue("")
-                            showAddSubtaskField = false
-                        }
+                IconButton(onClick = {
+                    if (subtaskInput.text.isNotBlank()) {
+                        onAddSubtask(task, subtaskInput.text.trim())
+                        subtaskInput = TextFieldValue("")
+                        showAddSubtaskField = false
                     }
-                ) {
+                }) {
                     Icon(Icons.Default.Check, contentDescription = "Подтвердить")
                 }
                 IconButton(onClick = {
@@ -422,7 +415,7 @@ fun TaskItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ToDoAppScreen(
     lists: List<TaskList>,
@@ -524,10 +517,9 @@ fun ToDoAppScreen(
         editingTaskId = null
     }
 
-    // Изменённая функция: удаляет только top-level задачи с done=true,
-    // подзадачи остаются, удаляются только при удалении задачи
     fun deleteDoneTasks() {
         val list = activeList ?: return
+        // Удаляем только top-level задачи, у которых done == true
         val filteredTasks = list.tasks.filter { !it.done }
         val updatedList = list.copy(tasks = filteredTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
@@ -585,9 +577,14 @@ fun ToDoAppScreen(
             }
         } else {
             taskIdPendingDelete = task.id
-            scope.launch {
-                snackbarHostState.showSnackbar("Нажмите повторно для удаления")
-            }
+            scope.launch { snackbarHostState.showSnackbar("Нажмите повторно для удаления") }
+        }
+    }
+
+    // Для кнопки info в меню
+    fun showMenuInfo() {
+        scope.launch {
+            snackbarHostState.showSnackbar("Свайпните для открытия или закрытия меню")
         }
     }
 
@@ -601,11 +598,19 @@ fun ToDoAppScreen(
                     .background(MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(16.dp))
             ) {
                 Column(modifier = Modifier.fillMaxHeight()) {
-                    Text(
-                        "Ваши списки",
-                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth()
-                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Ваши списки",
+                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold)
+                        )
+                        IconButton(onClick = { showMenuInfo() }) {
+                            Icon(Icons.Default.Info, contentDescription = "Информация", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(lists, key = { it.id }) { list ->
                             val selected = list.id == activeListId
@@ -635,8 +640,7 @@ fun ToDoAppScreen(
                                     }
                                     .padding(horizontal = 8.dp)
                                     .background(
-                                        if (selected)
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
                                         else MaterialTheme.colorScheme.surface
                                     )
                             )
@@ -728,7 +732,6 @@ fun ToDoAppScreen(
                         }
                     },
                     actions = {
-                        // Убрана кнопка смены темы из AppBar — теперь в меню
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -747,7 +750,7 @@ fun ToDoAppScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
                     ) {
                         Spacer(Modifier.height(16.dp))
-                        // Текстовое поле с иконкой-плюсом как кнопкой
+
                         OutlinedTextField(
                             value = input,
                             onValueChange = { input = it },
@@ -758,7 +761,6 @@ fun ToDoAppScreen(
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyLarge,
                             trailingIcon = {
-                                // Яркая кнопка-плюс с эффектом
                                 IconButton(
                                     onClick = { addTask(input.text) },
                                     modifier = Modifier.size(36.dp)
@@ -774,8 +776,15 @@ fun ToDoAppScreen(
                                         }
                                     }
                                 }
-                            }
+                            },
+                            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    addTask(input.text)
+                                }
+                            )
                         )
+
                         Spacer(Modifier.height(4.dp))
 
                         Row(
@@ -804,6 +813,7 @@ fun ToDoAppScreen(
                             )
                         }
                         Spacer(Modifier.height(4.dp))
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -834,6 +844,7 @@ fun ToDoAppScreen(
                             }
                         }
                         Spacer(Modifier.height(4.dp))
+
                         if (activeList == null) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -859,6 +870,7 @@ fun ToDoAppScreen(
                             }
                             Spacer(Modifier.height(4.dp))
                         }
+
                         val displayedTasks = filteredSortedTasks()
                         if (displayedTasks.isEmpty()) {
                             Box(
