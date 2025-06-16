@@ -17,9 +17,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.datastore.preferences.core.*
@@ -32,15 +35,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.unit.Dp
-
 
 // --- Data ---
-
 data class Task(
     val id: Int,
     val text: String,
@@ -75,10 +72,8 @@ enum class SortOption(val displayName: String) {
 }
 
 // --- DataStore ---
-
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
-
 val gson = Gson()
 
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
@@ -100,7 +95,6 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
         }
     }
 
-
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task ->
@@ -109,7 +103,6 @@ fun fixTasks(tasks: List<Task>?): List<Task> {
 }
 
 // --- Вспомогательные функции ---
-
 fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
     return tasks.map { task ->
         if (task.id == updatedTask.id) {
@@ -130,14 +123,11 @@ fun collectAllIds(task: Task): List<Int> {
 }
 
 // --- MainActivity ---
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
         val isDarkTheme = mutableStateOf(false)
-
         lifecycleScope.launch {
             applicationContext.loadTaskLists().collectLatest { loadedLists ->
                 if (loadedLists.isNotEmpty()) {
@@ -157,7 +147,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-
         setContent {
             MyFirstAppTheme(darkTheme = isDarkTheme.value) {
                 ToDoAppScreen(
@@ -177,7 +166,6 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- UI ---
-
 @Composable
 fun TaskItem(
     task: Task,
@@ -197,13 +185,10 @@ fun TaskItem(
     var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
     var isEditing by remember { mutableStateOf(false) }
     var editText by remember { mutableStateOf(TextFieldValue(task.text)) }
-
     val lineColor = MaterialTheme.colorScheme.primary
     val lineStrokeWidth = 5f
     val itemHeight = 48.dp
-
     val indent = if (level < leftIndents.size) leftIndents[level] else leftIndents.last()
-
     Column(
         modifier = modifier.padding(start = indent)
     ) {
@@ -222,47 +207,22 @@ fun TaskItem(
                     val heightPx = size.height
                     val halfHeight = heightPx / 2f
                     val indentPx = indent.toPx()
-
-                    // Рисуем вертикальные линии для уровней выше текущего, но
-                    // только если уровень >= 2 (под-подзадачи и глубже)
-                    hasNextSiblingAtLevel.forEachIndexed { idx, hasNextSibling ->
-                        if (idx >= 1) { // рисуем вертикальные линии только начиная с 2-го уровня вложенности
-
-                            val shiftPx = 70f // смещение влево
-                            val x = (if (idx < leftIndents.size) leftIndents[idx].toPx() / 2f else indentPx / 2f) - shiftPx
-
-                            val extraTop = 0f // выход над канвас
-                            val extraBottom = 130f // выход под канвас
-
-                            if (hasNextSibling) {
-                                drawLine(
-                                    color = lineColor,
-                                    strokeWidth = lineStrokeWidth,
-                                    start = Offset(x, -extraTop),
-                                    end = Offset(x, heightPx + extraBottom),
-                                    cap = StrokeCap.Round
-                                )
-                            }
-                        }
-                    }
-
-                    if (level > 0) {
+                    if (level == 1) {
                         val x = indentPx / 2f
                         // Горизонтальная линия к чекбоксу
                         drawLine(
                             color = lineColor,
                             strokeWidth = lineStrokeWidth,
                             start = Offset(x, halfHeight),
-                            end = Offset(indentPx, halfHeight),
+                            end = Offset(indentPx + 35f, halfHeight),
                             cap = StrokeCap.Round
                         )
-
                         // Вертикальная линия текущего уровня
                         if (isLast) {
                             drawLine(
                                 color = lineColor,
                                 strokeWidth = lineStrokeWidth,
-                                start = Offset(x, 0f),
+                                start = Offset(x, -35f),
                                 end = Offset(x, halfHeight),
                                 cap = StrokeCap.Round
                             )
@@ -270,7 +230,7 @@ fun TaskItem(
                             drawLine(
                                 color = lineColor,
                                 strokeWidth = lineStrokeWidth,
-                                start = Offset(x, 0f),
+                                start = Offset(x, -35f),
                                 end = Offset(x, heightPx),
                                 cap = StrokeCap.Round
                             )
@@ -278,12 +238,10 @@ fun TaskItem(
                     }
                 }
             }
-
             Checkbox(
                 checked = task.done,
                 onCheckedChange = { onCheckedChange(task.copy(done = it)) }
             )
-
             if (isEditing) {
                 OutlinedTextField(
                     value = editText,
@@ -323,7 +281,6 @@ fun TaskItem(
                     color = if (task.done) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
                 )
             }
-
             IconButton(onClick = { onDeleteIconClick(task) }) {
                 Icon(
                     Icons.Default.Delete,
@@ -331,14 +288,12 @@ fun TaskItem(
                     tint = if (taskIdPendingDelete == task.id) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            if (level < 2) {
+            if (level == 0) { // ограничаем создание подзадачи только на корневом уровне
                 IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
                 }
             }
         }
-
         if (showAddSubtaskField) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -371,7 +326,6 @@ fun TaskItem(
                 }
             }
         }
-
         val childCount = task.subtasks.size
         task.subtasks.forEachIndexed { index, subtask ->
             val hasNextSibling = index < childCount - 1
@@ -393,9 +347,6 @@ fun TaskItem(
 }
 
 
-
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToDoAppScreen(
@@ -409,19 +360,15 @@ fun ToDoAppScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-
     var activeListId by remember {
         mutableIntStateOf(lists.firstOrNull()?.id ?: -1)
     }
-
     LaunchedEffect(lists) {
         if (lists.none { it.id == activeListId }) {
             activeListId = lists.firstOrNull()?.id ?: -1
         }
     }
-
     val activeList = lists.find { it.id == activeListId }
-
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(TaskFilter.ALL) }
     var showDeleteDoneDialog by remember { mutableStateOf(false) }
@@ -429,10 +376,8 @@ fun ToDoAppScreen(
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
-
     // Для логики двойного нажатия удаления
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
-
     // Сброс taskIdPendingDelete через 3 секунды
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
@@ -440,7 +385,6 @@ fun ToDoAppScreen(
             taskIdPendingDelete = null
         }
     }
-
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
         val currentTasks = activeList.tasks
@@ -455,7 +399,6 @@ fun ToDoAppScreen(
         focusManager.clearFocus()
         keyboardController?.hide()
     }
-
     fun updateTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = updateTaskInList(list.tasks, task)
@@ -463,7 +406,6 @@ fun ToDoAppScreen(
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
     }
-
     fun deleteTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = deleteTaskFromList(list.tasks, task.id)
@@ -472,14 +414,12 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         taskIdPendingDelete = null
     }
-
     fun addSubtask(parentTask: Task, text: String) {
         val list = activeList ?: return
         val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
         var newId = 1
         while (newId in currentIds) newId++
         val newSubtask = Task(newId, text, false)
-
         fun addSubtaskRec(tasks: List<Task>): List<Task> = tasks.map { task ->
             if (task.id == parentTask.id) {
                 task.safeCopy(subtasks = task.subtasks + newSubtask)
@@ -487,27 +427,22 @@ fun ToDoAppScreen(
                 task.safeCopy(subtasks = addSubtaskRec(task.subtasks))
             }
         }
-
         val updatedTasks = addSubtaskRec(list.tasks)
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
     }
-
     fun deleteDoneTasks() {
         val list = activeList ?: return
-
         fun filterDone(tasks: List<Task>): List<Task> {
             return tasks.filter { !it.done }
                 .map { it.safeCopy(subtasks = filterDone(it.subtasks)) }
         }
-
         val updatedTasks = filterDone(list.tasks)
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
     }
-
     fun addTaskList(name: String) {
         if (name.isBlank()) return
         val newId = (lists.maxOfOrNull { it.id } ?: 0) + 1
@@ -516,7 +451,6 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         activeListId = newId
     }
-
     fun deleteTaskList(id: Int) {
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
@@ -524,16 +458,13 @@ fun ToDoAppScreen(
             activeListId = updatedLists.firstOrNull()?.id ?: -1
         }
     }
-
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
-
         val filtered = when (filter) {
             TaskFilter.ALL -> activeList.tasks
             TaskFilter.ACTIVE -> activeList.tasks.filter { !it.done }
             TaskFilter.DONE -> activeList.tasks.filter { it.done }
         }
-
         return when (selectedSortOption) {
             SortOption.A_TO_Z -> filtered.sortedBy { it.text.lowercase() }
             SortOption.Z_TO_A -> filtered.sortedByDescending { it.text.lowercase() }
@@ -544,7 +475,6 @@ fun ToDoAppScreen(
             )
         }
     }
-
     // Обработка клика по иконке удаления с двойным нажатием
     fun onDeleteIconClick(task: Task) {
         if (taskIdPendingDelete == task.id) {
@@ -559,7 +489,6 @@ fun ToDoAppScreen(
             }
         }
     }
-
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -591,7 +520,6 @@ fun ToDoAppScreen(
                         )
                     }
                 }
-
                 LazyColumn {
                     items(lists, key = { it.id }) { list ->
                         ListItem(
@@ -677,7 +605,6 @@ fun ToDoAppScreen(
                             .padding(horizontal = 16.dp)
                     ) {
                         Spacer(Modifier.height(16.dp))
-
                         OutlinedTextField(
                             value = input,
                             onValueChange = { input = it },
@@ -693,9 +620,7 @@ fun ToDoAppScreen(
                                 }
                             }
                         )
-
                         Spacer(Modifier.height(4.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -721,9 +646,7 @@ fun ToDoAppScreen(
                                 leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) }
                             )
                         }
-
                         Spacer(Modifier.height(4.dp))
-
                         // Выбор сортировки
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -757,9 +680,7 @@ fun ToDoAppScreen(
                                 }
                             }
                         }
-
                         Spacer(Modifier.height(4.dp))
-
                         if (activeList == null) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -773,7 +694,6 @@ fun ToDoAppScreen(
                             }
                             return@Column
                         }
-
                         if (activeList.tasks.any { it.done }) {
                             Button(
                                 onClick = { showDeleteDoneDialog = true },
@@ -786,9 +706,7 @@ fun ToDoAppScreen(
                             }
                             Spacer(Modifier.height(4.dp))
                         }
-
                         val displayedTasks = filteredSortedTasks()
-
                         if (displayedTasks.isEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -828,7 +746,6 @@ fun ToDoAppScreen(
                             }
                         }
                     }
-
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -851,7 +768,6 @@ fun ToDoAppScreen(
             }
         )
     }
-
     if (showDeleteDoneDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDoneDialog = false },
@@ -874,7 +790,6 @@ fun ToDoAppScreen(
             }
         )
     }
-
     if (showAddListDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -915,4 +830,3 @@ fun ToDoAppScreen(
         )
     }
 }
-
