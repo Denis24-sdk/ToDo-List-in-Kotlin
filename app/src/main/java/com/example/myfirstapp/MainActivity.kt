@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,7 +39,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 
 // --- Data ---
 data class Task(
@@ -360,30 +360,29 @@ fun ToDoAppScreen(
         mutableIntStateOf(lists.firstOrNull()?.id ?: -1)
     }
     var editingTaskId by remember { mutableStateOf<Int?>(null) }
-
-    LaunchedEffect(lists) {
-        if (lists.none { it.id == activeListId }) {
-            activeListId = lists.firstOrNull()?.id ?: -1
-            editingTaskId = null
-        }
-    }
+    var showDeleteDoneDialog by remember { mutableStateOf(false) }
+    var showAddListDialog by remember { mutableStateOf(false) }
+    var showDeleteListDialog by remember { mutableStateOf(false) }
+    var deleteListId by remember { mutableStateOf<Int?>(null) }
     val activeList = lists.find { it.id == activeListId }
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(TaskFilter.ALL) }
-    var showDeleteDoneDialog by remember { mutableStateOf(false) }
-    var showAddListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
-
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
             taskIdPendingDelete = null
         }
     }
-
+    LaunchedEffect(lists) {
+        if (lists.none { it.id == activeListId }) {
+            activeListId = lists.firstOrNull()?.id ?: -1
+            editingTaskId = null
+        }
+    }
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
         val currentTasks = activeList.tasks
@@ -399,7 +398,6 @@ fun ToDoAppScreen(
         keyboardController?.hide()
         editingTaskId = null
     }
-
     fun updateTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = updateTaskInList(list.tasks, task)
@@ -408,7 +406,6 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
-
     fun deleteTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = deleteTaskFromList(list.tasks, task.id)
@@ -418,7 +415,6 @@ fun ToDoAppScreen(
         taskIdPendingDelete = null
         editingTaskId = null
     }
-
     fun addSubtask(parentTask: Task, text: String) {
         val list = activeList ?: return
         val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
@@ -438,7 +434,6 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
-
     fun deleteDoneTasks() {
         val list = activeList ?: return
         fun filterDone(tasks: List<Task>): List<Task> {
@@ -451,7 +446,6 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
-
     fun addTaskList(name: String) {
         if (name.isBlank()) return
         val newId = (lists.maxOfOrNull { it.id } ?: 0) + 1
@@ -461,8 +455,7 @@ fun ToDoAppScreen(
         activeListId = newId
         editingTaskId = null
     }
-
-    fun deleteTaskList(id: Int) {
+    fun deleteTaskListConfirmed(id: Int) {
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
         if (activeListId == id) {
@@ -470,7 +463,10 @@ fun ToDoAppScreen(
         }
         editingTaskId = null
     }
-
+    fun deleteTaskListRequest(id: Int) {
+        deleteListId = id
+        showDeleteListDialog = true
+    }
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
         val filtered = when (filter) {
@@ -488,7 +484,6 @@ fun ToDoAppScreen(
             )
         }
     }
-
     fun onDeleteIconClick(task: Task) {
         if (taskIdPendingDelete == task.id) {
             scope.launch {
@@ -502,7 +497,6 @@ fun ToDoAppScreen(
             }
         }
     }
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -518,17 +512,18 @@ fun ToDoAppScreen(
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                         .fillMaxWidth()
                 )
-
                 LazyColumn {
                     items(lists, key = { it.id }) { list ->
                         val selected = list.id == activeListId
                         ListItem(
                             headlineContent = { Text(list.name) },
-                            leadingContent = { Icon(Icons.AutoMirrored.Default.List, contentDescription = null) },
+                            leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                             trailingContent = {
                                 if (lists.size > 1) {
                                     IconButton(
-                                        onClick = { deleteTaskList(list.id) },
+                                        onClick = {
+                                            deleteTaskListRequest(list.id)
+                                        },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -796,6 +791,38 @@ fun ToDoAppScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDoneDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+    // --- ДИАЛОГ ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ СПИСКА ---
+    if (showDeleteListDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteListDialog = false
+                deleteListId = null
+            },
+            title = { Text("Подтвердите удаление списка") },
+            text = { Text("Вы уверены, что хотите удалить этот список задач? Это действие нельзя отменить.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteListId?.let { deleteTaskListConfirmed(it) }
+                        showDeleteListDialog = false
+                        deleteListId = null
+                    }
+                ) {
+                    Text("Удалить")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteListDialog = false
+                        deleteListId = null
+                    }
+                ) {
                     Text("Отмена")
                 }
             }
