@@ -13,6 +13,7 @@
 |--------|------------------------------------------------------------------------------------------------------------|
 | 1.0.0   | [Скачать v1.0.0](https://github.com/Denis24-sdk/ToDo-List-in-Kotlin/releases/download/v1.0.0/ToDo-List-v1.0.0.apk)  |
 | 1.1.0    | [Скачать v1.1.0](https://github.com/Denis24-sdk/ToDo-List-in-Kotlin/releases/download/v1.1.0/v1.1.0.apk)  |
+| 1.2.0    | [Скачать v1.2.0](https://github.com/Denis24-sdk/ToDo-List-in-Kotlin/releases/download/v1.2.0/v1.2.0.apk)  |
 
 **Релизы:** [Ссылка](https://github.com/Denis24-sdk/ToDo-List-in-Kotlin/releases)
                 
