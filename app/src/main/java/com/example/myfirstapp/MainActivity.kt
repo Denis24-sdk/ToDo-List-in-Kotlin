@@ -21,9 +21,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 
 // --- Data ---
 data class Task(
@@ -58,11 +61,8 @@ data class Task(
         )
     }
 }
-
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
-
 enum class TaskFilter { ALL, ACTIVE, DONE }
-
 enum class SortOption(val displayName: String) {
     A_TO_Z("А-Я"),
     Z_TO_A("Я-А"),
@@ -70,19 +70,16 @@ enum class SortOption(val displayName: String) {
     OLDEST_FIRST("Сначала старые"),
     UNCOMPLETED_FIRST("Сначала невыполненные")
 }
-
 // --- DataStore ---
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
 val gson = Gson()
-
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
     val json = gson.toJson(lists)
     dataStore.edit { prefs ->
         prefs[TASK_LISTS_KEY] = json
     }
 }
-
 fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
@@ -94,15 +91,13 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
             )
         }
     }
-
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task ->
         task.safeCopy(subtasks = fixTasks(task.subtasks))
     }
 }
-
-// --- Вспомогательные функции ---
+// --- Helpers ---
 fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
     return tasks.map { task ->
         if (task.id == updatedTask.id) {
@@ -112,16 +107,13 @@ fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
         }
     }
 }
-
 fun deleteTaskFromList(tasks: List<Task>, taskId: Int): List<Task> {
     return tasks.filter { it.id != taskId }
         .map { it.safeCopy(subtasks = deleteTaskFromList(it.subtasks, taskId)) }
 }
-
 fun collectAllIds(task: Task): List<Int> {
     return listOf(task.id) + task.subtasks.flatMap { collectAllIds(it) }
 }
-
 // --- MainActivity ---
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -164,7 +156,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
 // --- UI ---
 @Composable
 fun TaskItem(
@@ -175,16 +166,18 @@ fun TaskItem(
     onTextChange: (Task) -> Unit,
     taskIdPendingDelete: Int?,
     onDeleteIconClick: (Task) -> Unit,
+    editingTaskId: Int?,
+    onEditingTaskChange: (Int?) -> Unit,
     modifier: Modifier = Modifier,
     level: Int = 0,
     isLast: Boolean = true,
     hasNextSiblingAtLevel: List<Boolean> = emptyList(),
     leftIndents: List<Dp> = listOf(0.dp, 15.9.dp, 26.7.dp)
 ) {
+    var editText by remember { mutableStateOf(TextFieldValue(task.text)) }
     var showAddSubtaskField by remember { mutableStateOf(false) }
     var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
-    var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(TextFieldValue(task.text)) }
+    val isEditing = (editingTaskId == task.id)
     val lineColor = MaterialTheme.colorScheme.primary
     val lineStrokeWidth = 5f
     val itemHeight = 48.dp
@@ -245,10 +238,10 @@ fun TaskItem(
             if (isEditing) {
                 OutlinedTextField(
                     value = editText,
-                    onValueChange = { editText = it },
-                    modifier = Modifier.weight(1f),
+                    onValueChange = { newValue -> editText = newValue },
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge,
                     trailingIcon = {
                         Row {
                             IconButton(onClick = {
@@ -256,12 +249,12 @@ fun TaskItem(
                                 if (newText.isNotBlank() && newText != task.text) {
                                     onTextChange(task.copy(text = newText))
                                 }
-                                isEditing = false
+                                onEditingTaskChange(null) // закрываем редактор
                             }) {
                                 Icon(Icons.Default.Check, contentDescription = "Сохранить")
                             }
                             IconButton(onClick = {
-                                isEditing = false
+                                onEditingTaskChange(null)
                                 editText = TextFieldValue(task.text)
                             }) {
                                 Icon(Icons.Default.Close, contentDescription = "Отмена")
@@ -274,24 +267,26 @@ fun TaskItem(
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            isEditing = true
+                            onEditingTaskChange(task.id)
                             editText = TextFieldValue(task.text)
                         },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (task.done) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
+                    style = if (level == 0)
+                        MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                    else
+                        MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal)
                 )
             }
-            IconButton(onClick = { onDeleteIconClick(task) }) {
+            if (level == 0) { // Поменяли местами: плюсик слева
+                IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
+                    Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+                }
+            }
+            IconButton(onClick = { onDeleteIconClick(task) }) { // удаление справа
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Удалить задачу",
                     tint = if (taskIdPendingDelete == task.id) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            if (level == 0) { // ограничаем создание подзадачи только на корневом уровне
-                IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
-                    Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
-                }
             }
         }
         if (showAddSubtaskField) {
@@ -302,10 +297,10 @@ fun TaskItem(
                 OutlinedTextField(
                     value = subtaskInput,
                     onValueChange = { subtaskInput = it },
-                    placeholder = { Text("Новая подзадача") },
-                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Новая подзадача", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)) },
+                    modifier = Modifier.weight(1f).height(54.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium
                 )
                 IconButton(
                     onClick = {
@@ -337,6 +332,8 @@ fun TaskItem(
                 onTextChange = onTextChange,
                 taskIdPendingDelete = taskIdPendingDelete,
                 onDeleteIconClick = onDeleteIconClick,
+                editingTaskId = editingTaskId,
+                onEditingTaskChange = onEditingTaskChange,
                 level = level + 1,
                 isLast = !hasNextSibling,
                 hasNextSiblingAtLevel = hasNextSiblingAtLevel + hasNextSibling,
@@ -345,7 +342,6 @@ fun TaskItem(
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -363,9 +359,12 @@ fun ToDoAppScreen(
     var activeListId by remember {
         mutableIntStateOf(lists.firstOrNull()?.id ?: -1)
     }
+    var editingTaskId by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(lists) {
         if (lists.none { it.id == activeListId }) {
             activeListId = lists.firstOrNull()?.id ?: -1
+            editingTaskId = null
         }
     }
     val activeList = lists.find { it.id == activeListId }
@@ -376,15 +375,15 @@ fun ToDoAppScreen(
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
-    // Для логики двойного нажатия удаления
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
-    // Сброс taskIdPendingDelete через 3 секунды
+
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
             taskIdPendingDelete = null
         }
     }
+
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
         val currentTasks = activeList.tasks
@@ -398,14 +397,18 @@ fun ToDoAppScreen(
         input = TextFieldValue("")
         focusManager.clearFocus()
         keyboardController?.hide()
+        editingTaskId = null
     }
+
     fun updateTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = updateTaskInList(list.tasks, task)
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
+        editingTaskId = null
     }
+
     fun deleteTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = deleteTaskFromList(list.tasks, task.id)
@@ -413,7 +416,9 @@ fun ToDoAppScreen(
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
         taskIdPendingDelete = null
+        editingTaskId = null
     }
+
     fun addSubtask(parentTask: Task, text: String) {
         val list = activeList ?: return
         val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
@@ -431,7 +436,9 @@ fun ToDoAppScreen(
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
+        editingTaskId = null
     }
+
     fun deleteDoneTasks() {
         val list = activeList ?: return
         fun filterDone(tasks: List<Task>): List<Task> {
@@ -442,7 +449,9 @@ fun ToDoAppScreen(
         val updatedList = list.copy(tasks = updatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
+        editingTaskId = null
     }
+
     fun addTaskList(name: String) {
         if (name.isBlank()) return
         val newId = (lists.maxOfOrNull { it.id } ?: 0) + 1
@@ -450,14 +459,18 @@ fun ToDoAppScreen(
         val updatedLists = lists + newList
         onListsChange(updatedLists)
         activeListId = newId
+        editingTaskId = null
     }
+
     fun deleteTaskList(id: Int) {
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
         if (activeListId == id) {
             activeListId = updatedLists.firstOrNull()?.id ?: -1
         }
+        editingTaskId = null
     }
+
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
         val filtered = when (filter) {
@@ -475,7 +488,7 @@ fun ToDoAppScreen(
             )
         }
     }
-    // Обработка клика по иконке удаления с двойным нажатием
+
     fun onDeleteIconClick(task: Task) {
         if (taskIdPendingDelete == task.id) {
             scope.launch {
@@ -494,42 +507,35 @@ fun ToDoAppScreen(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                modifier = Modifier.fillMaxHeight(0.9f)
+                modifier = Modifier
+                    .fillMaxHeight(0.9f)
+                    .padding(vertical = 8.dp)
             ) {
-                Row(
+                Text(
+                    "Ваши списки",
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
                     modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Ваши списки",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Для открытия списков свайпните вправо")
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Подсказка"
-                        )
-                    }
-                }
+                )
+
                 LazyColumn {
                     items(lists, key = { it.id }) { list ->
+                        val selected = list.id == activeListId
                         ListItem(
                             headlineContent = { Text(list.name) },
+                            leadingContent = { Icon(Icons.AutoMirrored.Default.List, contentDescription = null) },
                             trailingContent = {
                                 if (lists.size > 1) {
-                                    IconButton(onClick = {
-                                        deleteTaskList(list.id)
-                                    }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Удалить список")
+                                    IconButton(
+                                        onClick = { deleteTaskList(list.id) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Удалить список",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                     }
                                 }
                             },
@@ -537,9 +543,14 @@ fun ToDoAppScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     activeListId = list.id
+                                    editingTaskId = null
                                     scope.launch { drawerState.close() }
                                 }
                                 .padding(horizontal = 8.dp)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                    else MaterialTheme.colorScheme.surface
+                                )
                         )
                     }
                     item {
@@ -550,6 +561,7 @@ fun ToDoAppScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     showAddListDialog = true
+                                    editingTaskId = null
                                     scope.launch { drawerState.close() }
                                 }
                                 .padding(horizontal = 8.dp)
@@ -609,13 +621,11 @@ fun ToDoAppScreen(
                             value = input,
                             onValueChange = { input = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Например: купить хлеб") },
+                            placeholder = { Text("Введите задачу", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyLarge,
                             trailingIcon = {
-                                IconButton(
-                                    onClick = { addTask(input.text) }
-                                ) {
+                                IconButton(onClick = { addTask(input.text) }) {
                                     Icon(Icons.Default.Add, contentDescription = "Добавить")
                                 }
                             }
@@ -647,7 +657,6 @@ fun ToDoAppScreen(
                             )
                         }
                         Spacer(Modifier.height(4.dp))
-                        // Выбор сортировки
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -739,7 +748,9 @@ fun ToDoAppScreen(
                                             onAddSubtask = { parent, text -> addSubtask(parent, text) },
                                             onTextChange = { updatedTask -> updateTask(updatedTask) },
                                             taskIdPendingDelete = taskIdPendingDelete,
-                                            onDeleteIconClick = { onDeleteIconClick(it) }
+                                            onDeleteIconClick = { onDeleteIconClick(it) },
+                                            editingTaskId = editingTaskId,
+                                            onEditingTaskChange = { newId -> editingTaskId = newId },
                                         )
                                     }
                                 }
@@ -801,7 +812,7 @@ fun ToDoAppScreen(
                 OutlinedTextField(
                     value = newListName,
                     onValueChange = { newListName = it },
-                    label = { Text("Название списка") },
+                    placeholder = { Text("Новый список", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)) },
                     singleLine = true
                 )
             },
