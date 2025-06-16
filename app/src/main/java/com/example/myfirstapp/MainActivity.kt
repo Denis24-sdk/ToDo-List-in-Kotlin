@@ -4,18 +4,82 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -27,20 +91,27 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope
-import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.lifecycle.lifecycleScope
+import com.example.myfirstapp.ui.theme.BlueColors
+import com.example.myfirstapp.ui.theme.BrownColors
+import com.example.myfirstapp.ui.theme.GreenColors
 import com.example.myfirstapp.ui.theme.MyFirstAppTheme
+import com.example.myfirstapp.ui.theme.OrangeColors
+import com.example.myfirstapp.ui.theme.PurpleColors
+import com.example.myfirstapp.ui.theme.RedColors
+import com.example.myfirstapp.ui.theme.TealColors
+import com.example.myfirstapp.ui.theme.UniversalDarkColors
+import com.example.myfirstapp.ui.theme.YellowColors
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.Canvas
-import com.example.myfirstapp.ui.theme.*
-
 
 // --- Data ---
 data class Task(
@@ -99,7 +170,6 @@ fun fixTasks(tasks: List<Task>?): List<Task> {
         task.safeCopy(subtasks = fixTasks(task.subtasks))
     }
 }
-
 // --- Helpers ---
 fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
     return tasks.map { task ->
@@ -128,7 +198,7 @@ fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
 }
 // --- MainActivity ---
 class MainActivity : ComponentActivity() {
-    // Список тем для цикличного переключения
+    // Список тем для выбора
     private val themeList = listOf(
         BlueColors,
         UniversalDarkColors,
@@ -140,8 +210,6 @@ class MainActivity : ComponentActivity() {
         TealColors,
         BrownColors
     )
-    private var themeIndex = 0
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
@@ -176,9 +244,8 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     currentTheme = currentTheme.value,
-                    onThemeChange = {
-                        themeIndex = (themeIndex + 1) % themeList.size
-                        currentTheme.value = themeList[themeIndex]
+                    onThemeChange = { newTheme ->
+                        currentTheme.value = newTheme
                     }
                 )
             }
@@ -386,7 +453,7 @@ fun ToDoAppScreen(
     lists: List<TaskList>,
     onListsChange: (List<TaskList>) -> Unit,
     currentTheme: ColorScheme,
-    onThemeChange: () -> Unit,
+    onThemeChange: (ColorScheme) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -406,7 +473,6 @@ fun ToDoAppScreen(
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
-
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
@@ -419,6 +485,30 @@ fun ToDoAppScreen(
             editingTaskId = null
         }
     }
+
+    // Список тем (должен совпадать с MainActivity)
+    val themeList = listOf(
+        BlueColors,
+        UniversalDarkColors,
+        RedColors,
+        GreenColors,
+        YellowColors,
+        OrangeColors,
+        PurpleColors,
+        TealColors,
+        BrownColors
+    )
+    val themeNames = listOf(
+        "Синяя",
+        "Тёмная",
+        "Красная",
+        "Зелёная",
+        "Жёлтая",
+        "Оранжевая",
+        "Фиолетовая",
+        "Бирюзовая",
+        "Коричневая"
+    )
 
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
@@ -435,6 +525,7 @@ fun ToDoAppScreen(
         keyboardController?.hide()
         editingTaskId = null
     }
+
     fun updateTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = updateTaskInList(list.tasks, task)
@@ -444,6 +535,7 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
+
     fun deleteTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = deleteTaskFromList(list.tasks, task.id)
@@ -453,6 +545,7 @@ fun ToDoAppScreen(
         taskIdPendingDelete = null
         editingTaskId = null
     }
+
     fun addSubtask(parentTask: Task, text: String) {
         val list = activeList ?: return
         val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
@@ -472,6 +565,7 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
+
     fun deleteDoneTasks() {
         val list = activeList ?: return
         fun filterDone(tasks: List<Task>): List<Task> {
@@ -484,6 +578,7 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
+
     fun addTaskList(name: String) {
         if (name.isBlank()) return
         val newId = (lists.maxOfOrNull { it.id } ?: 0) + 1
@@ -493,6 +588,7 @@ fun ToDoAppScreen(
         activeListId = newId
         editingTaskId = null
     }
+
     fun deleteTaskListConfirmed(id: Int) {
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
@@ -501,10 +597,12 @@ fun ToDoAppScreen(
         }
         editingTaskId = null
     }
+
     fun deleteTaskListRequest(id: Int) {
         deleteListId = id
         showDeleteListDialog = true
     }
+
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
         val filtered = when (filter) {
@@ -522,6 +620,7 @@ fun ToDoAppScreen(
             )
         }
     }
+
     fun onDeleteIconClick(task: Task) {
         if (taskIdPendingDelete == task.id) {
             scope.launch {
@@ -535,6 +634,7 @@ fun ToDoAppScreen(
             }
         }
     }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -543,62 +643,122 @@ fun ToDoAppScreen(
                     .fillMaxHeight(0.9f)
                     .padding(vertical = 8.dp)
             ) {
-                Text(
-                    "Ваши списки",
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .fillMaxWidth()
-                )
-                LazyColumn {
-                    items(lists, key = { it.id }) { list ->
-                        val selected = list.id == activeListId
-                        ListItem(
-                            headlineContent = { Text(list.name) },
-                            leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                            trailingContent = {
-                                if (lists.size > 1) {
-                                    IconButton(
-                                        onClick = {
-                                            deleteTaskListRequest(list.id)
-                                        },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Удалить список",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
+                Column(
+                    modifier = Modifier.fillMaxHeight()
+                ) {
+                    Text(
+                        "Ваши списки",
+                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .fillMaxWidth()
+                    )
+                    LazyColumn(
+                        modifier = Modifier.weight(1f)  // Занимает всё доступное пространство сверху
+                    ) {
+                        items(lists, key = { it.id }) { list ->
+                            val selected = list.id == activeListId
+                            ListItem(
+                                headlineContent = { Text(list.name) },
+                                leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                                trailingContent = {
+                                    if (lists.size > 1) {
+                                        IconButton(
+                                            onClick = {
+                                                deleteTaskListRequest(list.id)
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Delete,
+                                                contentDescription = "Удалить список",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    activeListId = list.id
-                                    editingTaskId = null
-                                    scope.launch { drawerState.close() }
-                                }
-                                .padding(horizontal = 8.dp)
-                                .background(
-                                    if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                                    else MaterialTheme.colorScheme.surface
-                                )
-                        )
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        activeListId = list.id
+                                        editingTaskId = null
+                                        scope.launch { drawerState.close() }
+                                    }
+                                    .padding(horizontal = 8.dp)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                        else MaterialTheme.colorScheme.surface
+                                    )
+                            )
+                        }
+                        item {
+                            ListItem(
+                                headlineContent = { Text("Добавить список") },
+                                leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showAddListDialog = true
+                                        editingTaskId = null
+                                        scope.launch { drawerState.close() }
+                                    }
+                                    .padding(horizontal = 8.dp)
+                            )
+                        }
                     }
-                    item {
-                        ListItem(
-                            headlineContent = { Text("Добавить список") },
-                            leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    showAddListDialog = true
-                                    editingTaskId = null
-                                    scope.launch { drawerState.close() }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Text(
+                        "Выберите тему",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
+                    )
+
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        itemsIndexed(themeList) { index, theme ->
+                            val isSelected = theme == currentTheme
+
+                            Surface(
+                                tonalElevation = if (isSelected) 8.dp else 0.dp,
+                                shadowElevation = if (isSelected) 8.dp else 0.dp,
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier
+                                    .width(120.dp)
+                                    .clickable {
+                                        onThemeChange(theme)
+                                        scope.launch { drawerState.close() }
+                                    }
+                            ) {
+                                Column(
+                                    Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = themeNames[index],
+                                        color = theme.primary,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 60.dp, height = 30.dp)
+                                            .background(
+                                                color = theme.primary,
+                                                shape = MaterialTheme.shapes.small
+                                            )
+                                    )
                                 }
-                                .padding(horizontal = 8.dp)
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -622,12 +782,7 @@ fun ToDoAppScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { onThemeChange() }) {
-                            Icon(
-                                imageVector = if (currentTheme == UniversalDarkColors) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Переключить тему"
-                            )
-                        }
+                        // Кнопка переключения темы из AppBar убрана
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
