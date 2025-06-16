@@ -13,73 +13,16 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -91,25 +34,15 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
-import com.example.myfirstapp.ui.theme.BlueColors
-import com.example.myfirstapp.ui.theme.BrownColors
-import com.example.myfirstapp.ui.theme.GreenColors
-import com.example.myfirstapp.ui.theme.MyFirstAppTheme
-import com.example.myfirstapp.ui.theme.OrangeColors
-import com.example.myfirstapp.ui.theme.PurpleColors
-import com.example.myfirstapp.ui.theme.RedColors
-import com.example.myfirstapp.ui.theme.TealColors
-import com.example.myfirstapp.ui.theme.UniversalDarkColors
-import com.example.myfirstapp.ui.theme.YellowColors
+import com.example.myfirstapp.ui.theme.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -134,8 +67,11 @@ data class Task(
         )
     }
 }
+
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
+
 enum class TaskFilter { ALL, ACTIVE, DONE }
+
 enum class SortOption(val displayName: String) {
     A_TO_Z("А-Я"),
     Z_TO_A("Я-А"),
@@ -143,16 +79,21 @@ enum class SortOption(val displayName: String) {
     OLDEST_FIRST("Сначала старые"),
     UNCOMPLETED_FIRST("Сначала невыполненные")
 }
+
 // --- DataStore ---
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
+val ACTIVE_THEME_INDEX_KEY = intPreferencesKey("active_theme_index")
+val ACTIVE_LIST_ID_KEY = intPreferencesKey("active_list_id")
 val gson = Gson()
+
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
     val json = gson.toJson(lists)
     dataStore.edit { prefs ->
         prefs[TASK_LISTS_KEY] = json
     }
 }
+
 fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
@@ -164,13 +105,33 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
             )
         }
     }
+
+suspend fun Context.saveActiveThemeIndex(index: Int) {
+    dataStore.edit { prefs ->
+        prefs[ACTIVE_THEME_INDEX_KEY] = index
+    }
+}
+
+fun Context.readActiveThemeIndex(): Flow<Int> = dataStore.data
+    .map { prefs -> prefs[ACTIVE_THEME_INDEX_KEY] ?: 0 }
+
+suspend fun Context.saveActiveListId(id: Int) {
+    dataStore.edit { prefs ->
+        prefs[ACTIVE_LIST_ID_KEY] = id
+    }
+}
+
+fun Context.readActiveListId(): Flow<Int> = dataStore.data
+    .map { prefs -> prefs[ACTIVE_LIST_ID_KEY] ?: -1 }
+
+// --- Helpers ---
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task ->
         task.safeCopy(subtasks = fixTasks(task.subtasks))
     }
 }
-// --- Helpers ---
+
 fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
     return tasks.map { task ->
         if (task.id == updatedTask.id) {
@@ -184,10 +145,11 @@ fun deleteTaskFromList(tasks: List<Task>, taskId: Int): List<Task> {
     return tasks.filter { it.id != taskId }
         .map { it.safeCopy(subtasks = deleteTaskFromList(it.subtasks, taskId)) }
 }
+
 fun collectAllIds(task: Task): List<Int> {
     return listOf(task.id) + task.subtasks.flatMap { collectAllIds(it) }
 }
-// --- New recursive function to propagate "done" state bottom-up ---
+
 fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
     return tasks.map { task ->
         val updatedSubtasks = propagateTaskDoneState(task.subtasks)
@@ -196,9 +158,9 @@ fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
         task.safeCopy(done = doneNew, subtasks = updatedSubtasks)
     }
 }
+
 // --- MainActivity ---
 class MainActivity : ComponentActivity() {
-    // Список тем для выбора
     private val themeList = listOf(
         BlueColors,
         UniversalDarkColors,
@@ -212,27 +174,38 @@ class MainActivity : ComponentActivity() {
     )
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
         val currentTheme = mutableStateOf(themeList[0])
+        val activeListIdState = mutableStateOf(-1)
+
         lifecycleScope.launch {
-            applicationContext.loadTaskLists().collectLatest { loadedLists ->
-                if (loadedLists.isNotEmpty()) {
-                    listsState.value = loadedLists
-                } else {
-                    listsState.value = listOf(
-                        TaskList(
-                            id = 1,
-                            name = "Мои задачи",
-                            tasks = listOf(
-                                Task(1, "Купить хлеб", false),
-                                Task(2, "Позвонить маме", true),
-                                Task(3, "Сделать домашку", false),
-                            )
-                        )
+            val loadedLists = applicationContext.loadTaskLists().firstOrNull() ?: emptyList()
+            val themeIndex = applicationContext.readActiveThemeIndex().firstOrNull() ?: 0
+            val savedActiveListId = applicationContext.readActiveListId().firstOrNull() ?: -1
+
+            val listsToUse = if (loadedLists.isNotEmpty()) loadedLists else listOf(
+                TaskList(
+                    id = 1,
+                    name = "Мои задачи",
+                    tasks = listOf(
+                        Task(1, "Купить хлеб", false),
+                        Task(2, "Позвонить маме", true),
+                        Task(3, "Сделать домашку", false)
                     )
-                }
-            }
+                )
+            )
+
+            listsState.value = listsToUse
+
+            activeListIdState.value = if (listsToUse.any { it.id == savedActiveListId })
+                savedActiveListId
+            else
+                listsToUse.firstOrNull()?.id ?: -1
+
+            currentTheme.value = themeList.getOrElse(themeIndex) { themeList[0] }
         }
+
         setContent {
             MyFirstAppTheme(colorScheme = currentTheme.value) {
                 ToDoAppScreen(
@@ -245,14 +218,27 @@ class MainActivity : ComponentActivity() {
                     },
                     currentTheme = currentTheme.value,
                     onThemeChange = { newTheme ->
+                        val newIndex = themeList.indexOf(newTheme).takeIf { it >= 0 } ?: 0
                         currentTheme.value = newTheme
+                        lifecycleScope.launch {
+                            applicationContext.saveActiveThemeIndex(newIndex)
+                        }
+                    },
+                    activeListId = activeListIdState.value,
+                    onActiveListIdChange = { newActiveListId ->
+                        activeListIdState.value = newActiveListId
+                        lifecycleScope.launch {
+                            applicationContext.saveActiveListId(newActiveListId)
+                        }
                     }
                 )
             }
         }
     }
 }
+
 // --- UI ---
+
 @Composable
 fun TaskItem(
     task: Task,
@@ -328,7 +314,6 @@ fun TaskItem(
             Checkbox(
                 checked = task.done,
                 onCheckedChange = { checked ->
-                    // При изменении чекбокса задачи меняем состояние в ней и всех подзадач
                     fun setDoneRec(task: Task, done: Boolean): Task {
                         return task.safeCopy(
                             done = done,
@@ -353,7 +338,7 @@ fun TaskItem(
                                 if (newText.isNotBlank() && newText != task.text) {
                                     onTextChange(task.copy(text = newText))
                                 }
-                                onEditingTaskChange(null) // Закрываем редактор
+                                onEditingTaskChange(null)
                             }) {
                                 Icon(Icons.Default.Check, contentDescription = "Сохранить")
                             }
@@ -401,7 +386,12 @@ fun TaskItem(
                 OutlinedTextField(
                     value = subtaskInput,
                     onValueChange = { subtaskInput = it },
-                    placeholder = { Text("Новая подзадача", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)) },
+                    placeholder = {
+                        Text(
+                            "Новая подзадача",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    },
                     modifier = Modifier.weight(1f).height(54.dp),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                     singleLine = true,
@@ -454,61 +444,43 @@ fun ToDoAppScreen(
     onListsChange: (List<TaskList>) -> Unit,
     currentTheme: ColorScheme,
     onThemeChange: (ColorScheme) -> Unit,
+    activeListId: Int,
+    onActiveListIdChange: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    var activeListId by remember { mutableIntStateOf(lists.firstOrNull()?.id ?: -1) }
+
     var editingTaskId by remember { mutableStateOf<Int?>(null) }
     var showDeleteDoneDialog by remember { mutableStateOf(false) }
     var showAddListDialog by remember { mutableStateOf(false) }
     var showDeleteListDialog by remember { mutableStateOf(false) }
     var deleteListId by remember { mutableStateOf<Int?>(null) }
-    val activeList = lists.find { it.id == activeListId }
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(TaskFilter.ALL) }
     var newListName by remember { mutableStateOf(TextFieldValue("")) }
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
             taskIdPendingDelete = null
         }
     }
+
+    val activeList = lists.find { it.id == activeListId }
+
     LaunchedEffect(lists) {
         if (lists.none { it.id == activeListId }) {
-            activeListId = lists.firstOrNull()?.id ?: -1
+            val newActiveId = lists.firstOrNull()?.id ?: -1
+            onActiveListIdChange(newActiveId)
             editingTaskId = null
         }
     }
-
-    // Список тем (должен совпадать с MainActivity)
-    val themeList = listOf(
-        BlueColors,
-        UniversalDarkColors,
-        RedColors,
-        GreenColors,
-        YellowColors,
-        OrangeColors,
-        PurpleColors,
-        TealColors,
-        BrownColors
-    )
-    val themeNames = listOf(
-        "Синяя",
-        "Тёмная",
-        "Красная",
-        "Зелёная",
-        "Жёлтая",
-        "Оранжевая",
-        "Фиолетовая",
-        "Бирюзовая",
-        "Коричневая"
-    )
 
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
@@ -585,7 +557,7 @@ fun ToDoAppScreen(
         val newList = TaskList(newId, name.trim(), emptyList())
         val updatedLists = lists + newList
         onListsChange(updatedLists)
-        activeListId = newId
+        onActiveListIdChange(newId)
         editingTaskId = null
     }
 
@@ -593,7 +565,7 @@ fun ToDoAppScreen(
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
         if (activeListId == id) {
-            activeListId = updatedLists.firstOrNull()?.id ?: -1
+            onActiveListIdChange(updatedLists.firstOrNull()?.id ?: -1)
         }
         editingTaskId = null
     }
@@ -654,7 +626,7 @@ fun ToDoAppScreen(
                             .fillMaxWidth()
                     )
                     LazyColumn(
-                        modifier = Modifier.weight(1f)  // Занимает всё доступное пространство сверху
+                        modifier = Modifier.weight(1f) // Занимает всё доступное пространство
                     ) {
                         items(lists, key = { it.id }) { list ->
                             val selected = list.id == activeListId
@@ -664,9 +636,7 @@ fun ToDoAppScreen(
                                 trailingContent = {
                                     if (lists.size > 1) {
                                         IconButton(
-                                            onClick = {
-                                                deleteTaskListRequest(list.id)
-                                            },
+                                            onClick = { deleteTaskListRequest(list.id) },
                                             modifier = Modifier.size(36.dp)
                                         ) {
                                             Icon(
@@ -680,7 +650,7 @@ fun ToDoAppScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        activeListId = list.id
+                                        onActiveListIdChange(list.id)
                                         editingTaskId = null
                                         scope.launch { drawerState.close() }
                                     }
@@ -706,15 +676,12 @@ fun ToDoAppScreen(
                             )
                         }
                     }
-
                     Spacer(Modifier.height(12.dp))
-
                     Text(
                         "Выберите тему",
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                         modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
                     )
-
                     LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -722,9 +689,30 @@ fun ToDoAppScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(horizontal = 16.dp)
                     ) {
+                        val themeList = listOf(
+                            BlueColors,
+                            UniversalDarkColors,
+                            RedColors,
+                            GreenColors,
+                            YellowColors,
+                            OrangeColors,
+                            PurpleColors,
+                            TealColors,
+                            BrownColors
+                        )
+                        val themeNames = listOf(
+                            "Синяя",
+                            "Тёмная",
+                            "Красная",
+                            "Зелёная",
+                            "Жёлтая",
+                            "Оранжевая",
+                            "Фиолетовая",
+                            "Бирюзовая",
+                            "Коричневая"
+                        )
                         itemsIndexed(themeList) { index, theme ->
                             val isSelected = theme == currentTheme
-
                             Surface(
                                 tonalElevation = if (isSelected) 8.dp else 0.dp,
                                 shadowElevation = if (isSelected) 8.dp else 0.dp,
@@ -745,7 +733,9 @@ fun ToDoAppScreen(
                                     Text(
                                         text = themeNames[index],
                                         color = theme.primary,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Box(
@@ -769,9 +759,7 @@ fun ToDoAppScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = {
-                        Text(activeList?.name ?: "Нет списков")
-                    },
+                    title = { Text(activeList?.name ?: "Нет списков") },
                     navigationIcon = {
                         IconButton(onClick = {
                             scope.launch {
@@ -782,7 +770,7 @@ fun ToDoAppScreen(
                         }
                     },
                     actions = {
-                        // Кнопка переключения темы из AppBar убрана
+                        // Кнопка переключения темы убрана (теперь в меню)
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -809,7 +797,9 @@ fun ToDoAppScreen(
                             value = input,
                             onValueChange = { input = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Введите задачу", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)) },
+                            placeholder = {
+                                Text("Введите задачу", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                            },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyLarge,
                             trailingIcon = {
@@ -967,6 +957,8 @@ fun ToDoAppScreen(
             }
         )
     }
+
+    // Диалоги удаления
     if (showDeleteDoneDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDoneDialog = false },
@@ -978,14 +970,10 @@ fun ToDoAppScreen(
                         deleteDoneTasks()
                         showDeleteDoneDialog = false
                     }
-                ) {
-                    Text("Удалить")
-                }
+                ) { Text("Удалить") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDoneDialog = false }) {
-                    Text("Отмена")
-                }
+                TextButton(onClick = { showDeleteDoneDialog = false }) { Text("Отмена") }
             }
         )
     }
@@ -1004,9 +992,7 @@ fun ToDoAppScreen(
                         showDeleteListDialog = false
                         deleteListId = null
                     }
-                ) {
-                    Text("Удалить")
-                }
+                ) { Text("Удалить") }
             },
             dismissButton = {
                 TextButton(
@@ -1014,9 +1000,7 @@ fun ToDoAppScreen(
                         showDeleteListDialog = false
                         deleteListId = null
                     }
-                ) {
-                    Text("Отмена")
-                }
+                ) { Text("Отмена") }
             }
         )
     }
@@ -1043,9 +1027,7 @@ fun ToDoAppScreen(
                         newListName = TextFieldValue("")
                     },
                     enabled = newListName.text.isNotBlank()
-                ) {
-                    Text("Добавить")
-                }
+                ) { Text("Добавить") }
             },
             dismissButton = {
                 TextButton(
@@ -1053,9 +1035,7 @@ fun ToDoAppScreen(
                         showAddListDialog = false
                         newListName = TextFieldValue("")
                     }
-                ) {
-                    Text("Отмена")
-                }
+                ) { Text("Отмена") }
             }
         )
     }
