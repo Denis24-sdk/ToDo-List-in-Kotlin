@@ -61,8 +61,11 @@ data class Task(
         )
     }
 }
+
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
+
 enum class TaskFilter { ALL, ACTIVE, DONE }
+
 enum class SortOption(val displayName: String) {
     A_TO_Z("А-Я"),
     Z_TO_A("Я-А"),
@@ -70,16 +73,19 @@ enum class SortOption(val displayName: String) {
     OLDEST_FIRST("Сначала старые"),
     UNCOMPLETED_FIRST("Сначала невыполненные")
 }
+
 // --- DataStore ---
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
 val gson = Gson()
+
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
     val json = gson.toJson(lists)
     dataStore.edit { prefs ->
         prefs[TASK_LISTS_KEY] = json
     }
 }
+
 fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
@@ -91,12 +97,14 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
             )
         }
     }
+
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task ->
         task.safeCopy(subtasks = fixTasks(task.subtasks))
     }
 }
+
 // --- Helpers ---
 fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
     return tasks.map { task ->
@@ -107,13 +115,26 @@ fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
         }
     }
 }
+
 fun deleteTaskFromList(tasks: List<Task>, taskId: Int): List<Task> {
     return tasks.filter { it.id != taskId }
         .map { it.safeCopy(subtasks = deleteTaskFromList(it.subtasks, taskId)) }
 }
+
 fun collectAllIds(task: Task): List<Int> {
     return listOf(task.id) + task.subtasks.flatMap { collectAllIds(it) }
 }
+
+// --- New recursive function to propagate "done" state bottom-up ---
+fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
+    return tasks.map { task ->
+        val updatedSubtasks = propagateTaskDoneState(task.subtasks)
+        val allSubtasksDone = updatedSubtasks.isNotEmpty() && updatedSubtasks.all { it.done }
+        val doneNew = if (updatedSubtasks.isEmpty()) task.done else allSubtasksDone
+        task.safeCopy(done = doneNew, subtasks = updatedSubtasks)
+    }
+}
+
 // --- MainActivity ---
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -156,6 +177,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 // --- UI ---
 @Composable
 fun TaskItem(
@@ -202,7 +224,6 @@ fun TaskItem(
                     val indentPx = indent.toPx()
                     if (level == 1) {
                         val x = indentPx / 2f
-                        // Горизонтальная линия к чекбоксу
                         drawLine(
                             color = lineColor,
                             strokeWidth = lineStrokeWidth,
@@ -210,7 +231,6 @@ fun TaskItem(
                             end = Offset(indentPx + 35f, halfHeight),
                             cap = StrokeCap.Round
                         )
-                        // Вертикальная линия текущего уровня
                         if (isLast) {
                             drawLine(
                                 color = lineColor,
@@ -233,7 +253,17 @@ fun TaskItem(
             }
             Checkbox(
                 checked = task.done,
-                onCheckedChange = { onCheckedChange(task.copy(done = it)) }
+                onCheckedChange = { checked ->
+                    // При изменении чекбокса задачи меняем состояние в ней и всех подзадач
+                    fun setDoneRec(task: Task, done: Boolean): Task {
+                        return task.safeCopy(
+                            done = done,
+                            subtasks = task.subtasks.map { setDoneRec(it, done) }
+                        )
+                    }
+                    val updatedTask = setDoneRec(task, checked)
+                    onCheckedChange(updatedTask)
+                }
             )
             if (isEditing) {
                 OutlinedTextField(
@@ -249,7 +279,7 @@ fun TaskItem(
                                 if (newText.isNotBlank() && newText != task.text) {
                                     onTextChange(task.copy(text = newText))
                                 }
-                                onEditingTaskChange(null) // закрываем редактор
+                                onEditingTaskChange(null) // Закрываем редактор
                             }) {
                                 Icon(Icons.Default.Check, contentDescription = "Сохранить")
                             }
@@ -276,12 +306,12 @@ fun TaskItem(
                         MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal)
                 )
             }
-            if (level == 0) { // Поменяли местами: плюсик слева
+            if (level == 0) {
                 IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
                 }
             }
-            IconButton(onClick = { onDeleteIconClick(task) }) { // удаление справа
+            IconButton(onClick = { onDeleteIconClick(task) }) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Удалить задачу",
@@ -383,6 +413,7 @@ fun ToDoAppScreen(
             editingTaskId = null
         }
     }
+
     fun addTask(text: String) {
         if (text.isBlank() || activeList == null) return
         val currentTasks = activeList.tasks
@@ -398,14 +429,20 @@ fun ToDoAppScreen(
         keyboardController?.hide()
         editingTaskId = null
     }
+
     fun updateTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = updateTaskInList(list.tasks, task)
-        val updatedList = list.copy(tasks = updatedTasks)
+
+        // Пропагируем done статус задачи с учетом подзадач
+        val propagatedTasks = propagateTaskDoneState(updatedTasks)
+
+        val updatedList = list.copy(tasks = propagatedTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
         editingTaskId = null
     }
+
     fun deleteTask(task: Task) {
         val list = activeList ?: return
         val updatedTasks = deleteTaskFromList(list.tasks, task.id)
@@ -415,6 +452,7 @@ fun ToDoAppScreen(
         taskIdPendingDelete = null
         editingTaskId = null
     }
+
     fun addSubtask(parentTask: Task, text: String) {
         val list = activeList ?: return
         val currentIds = list.tasks.flatMap { collectAllIds(it) }.toSet()
@@ -434,6 +472,7 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
+
     fun deleteDoneTasks() {
         val list = activeList ?: return
         fun filterDone(tasks: List<Task>): List<Task> {
@@ -446,6 +485,7 @@ fun ToDoAppScreen(
         onListsChange(updatedLists)
         editingTaskId = null
     }
+
     fun addTaskList(name: String) {
         if (name.isBlank()) return
         val newId = (lists.maxOfOrNull { it.id } ?: 0) + 1
@@ -455,6 +495,7 @@ fun ToDoAppScreen(
         activeListId = newId
         editingTaskId = null
     }
+
     fun deleteTaskListConfirmed(id: Int) {
         val updatedLists = lists.filter { it.id != id }
         onListsChange(updatedLists)
@@ -463,10 +504,12 @@ fun ToDoAppScreen(
         }
         editingTaskId = null
     }
+
     fun deleteTaskListRequest(id: Int) {
         deleteListId = id
         showDeleteListDialog = true
     }
+
     fun filteredSortedTasks(): List<Task> {
         if (activeList == null) return emptyList()
         val filtered = when (filter) {
@@ -484,6 +527,7 @@ fun ToDoAppScreen(
             )
         }
     }
+
     fun onDeleteIconClick(task: Task) {
         if (taskIdPendingDelete == task.id) {
             scope.launch {
@@ -497,6 +541,7 @@ fun ToDoAppScreen(
             }
         }
     }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -796,7 +841,6 @@ fun ToDoAppScreen(
             }
         )
     }
-    // --- ДИАЛОГ ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ СПИСКА ---
     if (showDeleteListDialog) {
         AlertDialog(
             onDismissRequest = {
