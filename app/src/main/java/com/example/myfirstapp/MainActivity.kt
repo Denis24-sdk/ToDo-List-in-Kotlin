@@ -1,9 +1,13 @@
 package com.example.myfirstapp
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -12,9 +16,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,7 +43,21 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -79,7 +112,16 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
-import com.example.myfirstapp.ui.theme.*
+import com.example.myfirstapp.ui.theme.BlueColors
+import com.example.myfirstapp.ui.theme.BrownColors
+import com.example.myfirstapp.ui.theme.GreenColors
+import com.example.myfirstapp.ui.theme.MyFirstAppTheme
+import com.example.myfirstapp.ui.theme.OrangeColors
+import com.example.myfirstapp.ui.theme.PurpleColors
+import com.example.myfirstapp.ui.theme.RedColors
+import com.example.myfirstapp.ui.theme.TealColors
+import com.example.myfirstapp.ui.theme.UniversalDarkColors
+import com.example.myfirstapp.ui.theme.YellowColors
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
@@ -195,19 +237,40 @@ fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
     }
 }
 
-// --- MainActivity ---
+
 
 class MainActivity : ComponentActivity() {
-    private val themeList = listOf(
-        BlueColors, UniversalDarkColors, RedColors, GreenColors,
-        YellowColors, OrangeColors, PurpleColors, TealColors, BrownColors
-    )
+
+    private lateinit var importLauncher: ActivityResultLauncher<Array<String>>
+    private val gson = Gson()
+
+    // Состояния для хранения списков и т.п.
+    private val listsState = mutableStateOf<List<TaskList>>(emptyList())
+    private val currentTheme = mutableStateOf(BlueColors)
+    private val activeListIdState = mutableIntStateOf(-1)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val listsState = mutableStateOf<List<TaskList>>(emptyList())
-        val currentTheme = mutableStateOf(themeList[0])
-        val activeListIdState = mutableIntStateOf(-1)
+
+        importLauncher = registerForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri: Uri? ->
+            uri?.let {
+                lifecycleScope.launch {
+                    val content = contentResolver.openInputStream(uri)?.bufferedReader().use { it?.readText() }
+                    if (!content.isNullOrEmpty()) {
+                        val type = object : TypeToken<List<TaskList>>() {}.type
+                        val importedLists: List<TaskList> = gson.fromJson(content, type)
+                        // Обновляем локальное состояние и сохраняем в DataStore
+                        listsState.value = importedLists
+                        saveLists(importedLists)
+                        // Можно сменить активный список и т.п. по логике
+                        activeListIdState.value = importedLists.firstOrNull()?.id ?: -1
+                    }
+                }
+            }
+        }
+
         lifecycleScope.launch {
             val loadedLists = applicationContext.loadTaskLists().firstOrNull() ?: emptyList()
             val themeIndex = applicationContext.readActiveThemeIndex().firstOrNull() ?: 0
@@ -224,30 +287,113 @@ class MainActivity : ComponentActivity() {
                 )
             }
             listsState.value = listsToUse
-            activeListIdState.intValue = if (listsToUse.any { it.id == savedActiveListId })
+            activeListIdState.value = if (listsToUse.any { it.id == savedActiveListId })
                 savedActiveListId else listsToUse.firstOrNull()?.id ?: -1
-            currentTheme.value = themeList.getOrElse(themeIndex) { themeList[0] }
+            // Тема
+            val themeList = listOf(
+                BlueColors, UniversalDarkColors, RedColors, GreenColors,
+                YellowColors, OrangeColors, PurpleColors, TealColors, BrownColors)
+            currentTheme.value = themeList.getOrElse(themeIndex) { BlueColors }
         }
+
         setContent {
             MyFirstAppTheme(colorScheme = currentTheme.value) {
                 ToDoAppScreen(
                     lists = listsState.value,
                     onListsChange = { newLists ->
                         listsState.value = newLists
-                        lifecycleScope.launch { applicationContext.saveTaskLists(newLists) }
+                        lifecycleScope.launch { saveLists(newLists) }
                     },
                     currentTheme = currentTheme.value,
                     onThemeChange = { newTheme ->
+                        val themeList = listOf(
+                            BlueColors, UniversalDarkColors, RedColors, GreenColors,
+                            YellowColors, OrangeColors, PurpleColors, TealColors, BrownColors)
                         val newIndex = themeList.indexOf(newTheme).takeIf { it >= 0 } ?: 0
                         currentTheme.value = newTheme
-                        lifecycleScope.launch { applicationContext.saveActiveThemeIndex(newIndex) }
+                        lifecycleScope.launch { saveThemeIndex(newIndex) }
                     },
-                    activeListId = activeListIdState.intValue,
-                    onActiveListIdChange = { newActiveListId ->
-                        activeListIdState.intValue = newActiveListId
-                        lifecycleScope.launch { applicationContext.saveActiveListId(newActiveListId) }
-                    }
+                    activeListId = activeListIdState.value,
+                    onActiveListIdChange = { newActiveId ->
+                        activeListIdState.value = newActiveId
+                        lifecycleScope.launch { saveActiveListId(newActiveId) }
+                    },
+                    onExport = { exportListsToDownloads(listsState.value) },
+                    onImport = { importLists() }
                 )
+            }
+        }
+    }
+
+    private suspend fun saveLists(lists: List<TaskList>) {
+        applicationContext.saveTaskLists(lists)
+    }
+
+    private suspend fun saveThemeIndex(index: Int) {
+        applicationContext.saveActiveThemeIndex(index)
+    }
+
+    private suspend fun saveActiveListId(id: Int) {
+        applicationContext.saveActiveListId(id)
+    }
+
+    private fun importLists() {
+        importLauncher.launch(arrayOf("application/json"))
+    }
+
+    private fun exportListsToDownloads(lists: List<TaskList>) {
+        lifecycleScope.launch {
+            try {
+                val json = gson.toJson(lists)
+                val fileName = "tasks_export_${System.currentTimeMillis()}.json"
+
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download") // Папка Загрузки
+                        put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                }
+
+                val resolver = applicationContext.contentResolver
+                val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    android.provider.MediaStore.Downloads.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                } else {
+                    android.provider.MediaStore.Files.getContentUri("external")
+                }
+
+                val itemUri = resolver.insert(collection, contentValues)
+                if (itemUri != null) {
+                    resolver.openOutputStream(itemUri)?.use { outputStream ->
+                        outputStream.write(json.toByteArray(Charsets.UTF_8))
+                        outputStream.flush()
+                    }
+
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        contentValues.clear()
+                        contentValues.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                        resolver.update(itemUri, contentValues, null, null)
+                    }
+
+                    runOnUiThread {
+                        try {
+                            val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(itemUri, "application/json")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(openIntent, "Открыть файл"))
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            // Показывать ошибку пользователю
+                        }
+                    }
+                } else {
+                    // Ошибка создания файла
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Ошибка записи
             }
         }
     }
@@ -592,6 +738,8 @@ fun ToDoAppScreen(
     onThemeChange: (ColorScheme) -> Unit,
     activeListId: Int,
     onActiveListIdChange: (Int) -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -763,7 +911,7 @@ fun ToDoAppScreen(
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier
-                    .fillMaxHeight() // Исправлено - максимальная высота меню
+                    .fillMaxHeight()
                     .padding(vertical = 8.dp)
                     .background(MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(16.dp))
             ) {
@@ -771,8 +919,7 @@ fun ToDoAppScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                            .height(86.dp),     // высота шапки 86.dp согласно задаче
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -788,7 +935,12 @@ fun ToDoAppScreen(
                         items(lists, key = { it.id }) { list ->
                             val selected = list.id == activeListId
                             ListItem(
-                                headlineContent = { Text(list.name) },
+                                headlineContent = {
+                                    Text(
+                                        list.name,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
                                 leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                                 trailingContent = {
                                     if (lists.size > 1) {
@@ -809,8 +961,13 @@ fun ToDoAppScreen(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
-                                        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
                                         else MaterialTheme.colorScheme.surface
+                                    )
+                                    .border(
+                                        width = if (selected) 4.dp else 0.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(12.dp)
                                     )
                                     .clickable {
                                         onActiveListIdChange(list.id)
@@ -897,7 +1054,7 @@ fun ToDoAppScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text(activeList?.name ?: "Нет списков") },
+                    title = { Text("") }, //пустой заголовок
                     navigationIcon = {
                         IconButton(onClick = {
                             scope.launch {
@@ -908,6 +1065,19 @@ fun ToDoAppScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = {
+                            onExport()
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Экспорт успешно завершён в \"Загрузки\"")
+                            }
+                        }) {
+                            Icon(Icons.Default.FileUpload, contentDescription = "Экспортировать задачи")
+                        }
+
+                        IconButton(onClick = onImport) {
+                            Icon(Icons.Default.FileDownload, contentDescription = "Импортировать задачи")
+                        }
+
                     },
                     modifier = Modifier.height(86.dp), // Высота шапки 86dp
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
