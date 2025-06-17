@@ -62,6 +62,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -603,7 +604,8 @@ fun TaskItem(
 
                 val updatedTask = setDoneRec(task, checked)
                 onCheckedChange(updatedTask)
-            })
+            },
+                colors = CheckboxDefaults.colors(uncheckedColor = lineColor))
 
             if (isEditing) {
                 OutlinedTextField(
