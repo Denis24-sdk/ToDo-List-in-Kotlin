@@ -19,11 +19,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -35,9 +35,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -64,6 +63,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -124,6 +124,7 @@ import com.example.myfirstapp.ui.theme.UniversalDarkColors
 import com.example.myfirstapp.ui.theme.YellowColors
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -265,7 +266,7 @@ class MainActivity : ComponentActivity() {
                         listsState.value = importedLists
                         saveLists(importedLists)
                         // Можно сменить активный список и т.п. по логике
-                        activeListIdState.value = importedLists.firstOrNull()?.id ?: -1
+                        activeListIdState.intValue = importedLists.firstOrNull()?.id ?: -1
                     }
                 }
             }
@@ -287,7 +288,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             listsState.value = listsToUse
-            activeListIdState.value = if (listsToUse.any { it.id == savedActiveListId })
+            activeListIdState.intValue = if (listsToUse.any { it.id == savedActiveListId })
                 savedActiveListId else listsToUse.firstOrNull()?.id ?: -1
             // Тема
             val themeList = listOf(
@@ -313,9 +314,9 @@ class MainActivity : ComponentActivity() {
                         currentTheme.value = newTheme
                         lifecycleScope.launch { saveThemeIndex(newIndex) }
                     },
-                    activeListId = activeListIdState.value,
+                    activeListId = activeListIdState.intValue,
                     onActiveListIdChange = { newActiveId ->
-                        activeListIdState.value = newActiveId
+                        activeListIdState.intValue = newActiveId
                         lifecycleScope.launch { saveActiveListId(newActiveId) }
                     },
                     onExport = { exportListsToDownloads(listsState.value) },
@@ -394,6 +395,118 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 // Ошибка записи
+            }
+        }
+    }
+}
+
+
+// функция для списка тем
+@Composable
+fun ThemeSelectorHorizontalTwoRows(
+    themeList: List<ColorScheme>,
+    themeNames: List<String>,
+    currentTheme: ColorScheme,
+    onThemeChange: (ColorScheme) -> Unit,
+    scope: CoroutineScope,
+    drawerState: DrawerState
+) {
+    val half = (themeList.size + 1) / 2
+    val firstRowThemes = themeList.take(half)
+    val secondRowThemes = themeList.drop(half)
+    val firstRowNames = themeNames.take(half)
+    val secondRowNames = themeNames.drop(half)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Верхний ряд
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                firstRowThemes.forEachIndexed { index, theme ->
+                    val isSelected = theme == currentTheme
+                    Surface(
+                        tonalElevation = if (isSelected) 8.dp else 0.dp,
+                        shadowElevation = if (isSelected) 8.dp else 0.dp,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(100.dp)
+                            .clickable {
+                                onThemeChange(theme)
+                                scope.launch { drawerState.close() }
+                            }
+                    ) {
+                        Column(
+                            Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = firstRowNames[index],
+                                color = theme.primary,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 60.dp, height = 30.dp)
+                                    .background(color = theme.primary, shape = MaterialTheme.shapes.small)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            // Нижний ряд
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(start = 70.dp, bottom = 15.dp)
+            ) {
+                secondRowThemes.forEachIndexed { index, theme ->
+                    val isSelected = theme == currentTheme
+                    Surface(
+                        tonalElevation = if (isSelected) 8.dp else 0.dp,
+                        shadowElevation = if (isSelected) 8.dp else 0.dp,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(100.dp)
+                            .clickable {
+                                onThemeChange(theme)
+                                scope.launch { drawerState.close() }
+                            }
+                    ) {
+                        Column(
+                            Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = secondRowNames[index],
+                                color = theme.primary,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 60.dp, height = 30.dp)
+                                    .background(color = theme.primary, shape = MaterialTheme.shapes.small)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -994,57 +1107,32 @@ fun ToDoAppScreen(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
+
                     Text(
                         "Выберите тему",
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                         modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
                     )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
-                    ) {
-                        val themeList = listOf(
-                            BlueColors, UniversalDarkColors, RedColors,
-                            GreenColors, YellowColors, OrangeColors,
-                            PurpleColors, TealColors, BrownColors
-                        )
-                        val themeNames = listOf(
-                            "Синяя", "Тёмная", "Красная",
-                            "Зелёная", "Жёлтая", "Оранжевая",
-                            "Фиолетовая", "Бирюзовая", "Коричневая"
-                        )
-                        itemsIndexed(themeList) { index, theme ->
-                            val isSelected = theme == currentTheme
-                            Surface(
-                                tonalElevation = if (isSelected) 8.dp else 0.dp,
-                                shadowElevation = if (isSelected) 8.dp else 0.dp,
-                                shape = MaterialTheme.shapes.medium,
-                                modifier = Modifier.width(120.dp).clickable {
-                                    onThemeChange(theme)
-                                    scope.launch { drawerState.close() }
-                                }
-                            ) {
-                                Column(
-                                    Modifier.padding(12.dp).fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = themeNames[index],
-                                        color = theme.primary,
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    Box(
-                                        modifier = Modifier.size(width = 60.dp, height = 30.dp)
-                                            .background(color = theme.primary, shape = MaterialTheme.shapes.small)
-                                    )
-                                }
-                            }
-                        }
-                    }
+
+                    val themeList = listOf(
+                        BlueColors, UniversalDarkColors, RedColors,
+                        GreenColors, YellowColors, OrangeColors,
+                        PurpleColors, TealColors, BrownColors
+                    )
+                    val themeNames = listOf(
+                        "Синяя", "Тёмная", "Красная",
+                        "Зелёная", "Жёлтая", "Оранжевая",
+                        "Фиолетовая", "Бирюзовая", "Коричневая"
+                    )
+
+                    ThemeSelectorHorizontalTwoRows(
+                        themeList = themeList,
+                        themeNames = themeNames,
+                        currentTheme = currentTheme,
+                        onThemeChange = onThemeChange,
+                        scope = scope,
+                        drawerState = drawerState
+                    )
                 }
             }
         },
