@@ -575,7 +575,7 @@ fun TaskItem(
                     // линия под задачей, когда подзадача свёрнута
                     if (!expanded && task.subtasks.isNotEmpty()) {
                         val verticalLengthPx = 12.dp.toPx()
-                        val horizontalLengthPx = 250.dp.toPx()
+                        val horizontalLengthPx = 70.dp.toPx()
                         val startX = indentPx + 24.dp.toPx()
                         val startY = heightPx - 14.dp.toPx()
                         drawLine(
@@ -1167,7 +1167,7 @@ fun ToDoAppScreen(
                         }
 
                     },
-                    modifier = Modifier.height(86.dp), // Высота шапки 86dp
+                    modifier = Modifier.height(56.dp),
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
