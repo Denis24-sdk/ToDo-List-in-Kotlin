@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -83,10 +85,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -117,9 +120,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 
 
 // --- Data ---
@@ -240,13 +240,15 @@ class MainActivity : ComponentActivity() {
             val loadedLists = applicationContext.loadTaskLists().firstOrNull() ?: emptyList()
             val themeIndex = applicationContext.readActiveThemeIndex().firstOrNull() ?: 0
             val savedActiveListId = applicationContext.readActiveListId().firstOrNull() ?: -1
-            val listsToUse = if (loadedLists.isNotEmpty()) loadedLists else listOf(
-                TaskList(1, "Мои задачи", listOf(
-                    Task(1, "Купить хлеб", false),
-                    Task(2, "Позвонить маме", true),
-                    Task(3, "Сделать домашку", false)
-                ))
-            )
+            val listsToUse = loadedLists.ifEmpty {
+                listOf(
+                    TaskList(1, "Мои задачи", listOf(
+                        Task(1, "Купить хлеб", false),
+                        Task(2, "Позвонить маме", true),
+                        Task(3, "Сделать домашку", false)
+                    ))
+                )
+            }
             listsState.value = listsToUse
             activeListIdState.intValue = if (listsToUse.any { it.id == savedActiveListId })
                 savedActiveListId else listsToUse.firstOrNull()?.id ?: -1
@@ -300,15 +302,12 @@ fun TaskItem(
     var showAddSubtaskField by remember { mutableStateOf(false) }
     var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
     var expanded by remember { mutableStateOf(true) }
-
-    // Управление меню с опциями
     var showOptionsMenu by remember { mutableStateOf(false) }
     val isEditing = (editingTaskId == task.id)
     val lineColor = MaterialTheme.colorScheme.primary
     val lineStrokeWidth = 5f
     val itemHeight = 48.dp
     val indent = if (level < leftIndents.size) leftIndents[level] else leftIndents.last()
-
     Column(modifier = modifier.padding(start = indent)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -388,42 +387,56 @@ fun TaskItem(
                 )
             }
 
-
-            // Кнопка меню действий
+            // меню делаем иконки в ряд
             Box {
                 IconButton(onClick = { showOptionsMenu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Меню действий задачи")
                 }
                 DropdownMenu(
                     expanded = showOptionsMenu,
-                    onDismissRequest = { showOptionsMenu = false }
+                    onDismissRequest = { showOptionsMenu = false },
+                    modifier = Modifier
+                        .width(IntrinsicSize.Min)
+                        .height(50.dp)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Изменить") },
-                        onClick = {
-                            onEditingTaskChange(task.id)
-                            editText = TextFieldValue(task.text)
-                            showOptionsMenu = false
+                    Row(
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                onEditingTaskChange(task.id)
+                                editText = TextFieldValue(task.text)
+                                showOptionsMenu = false
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Изменить задачу")
                         }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Добавить подзадачу") },
-                        onClick = {
-                            showAddSubtaskField = true
-                            showOptionsMenu = false
+                        IconButton(
+                            onClick = {
+                                showAddSubtaskField = true
+                                showOptionsMenu = false
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
                         }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Удалить") },
-                        onClick = {
-                            onDeleteRequest(task)
-                            showOptionsMenu = false
+                        IconButton(
+                            onClick = {
+                                onDeleteRequest(task)
+                                showOptionsMenu = false
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Удалить задачу")
                         }
-                    )
+                    }
                 }
             }
-        }
 
+        }
         if (showAddSubtaskField) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -459,7 +472,6 @@ fun TaskItem(
                 }
             }
         }
-
         val childCount = task.subtasks.size
         if (expanded) {
             task.subtasks.forEachIndexed { index, subtask ->
@@ -485,8 +497,7 @@ fun TaskItem(
 }
 
 
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToDoAppScreen(
     lists: List<TaskList>,
