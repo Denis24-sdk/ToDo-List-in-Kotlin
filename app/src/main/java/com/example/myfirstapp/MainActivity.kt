@@ -13,6 +13,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,6 +119,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 
 
 // --- Data ---
@@ -339,19 +341,6 @@ fun TaskItem(
                 val updatedTask = setDoneRec(task, checked)
                 onCheckedChange(updatedTask)
             })
-            if (task.subtasks.isNotEmpty()) {
-                IconButton(onClick = { expanded = !expanded }) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowDropDown,
-                        contentDescription = if (expanded) "Свернуть" else "Развернуть",
-                        modifier = Modifier.graphicsLayer {
-                            rotationZ = if (expanded) 0f else -90f
-                        }
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.width(40.dp))
-            }
 
             if (isEditing) {
                 OutlinedTextField(
@@ -383,13 +372,22 @@ fun TaskItem(
             } else {
                 Text(
                     text = task.text,
-                    modifier = Modifier.weight(1f), // убираем clickable с текста
+                    modifier = Modifier
+                        .weight(1f)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    expanded = !expanded
+                                }
+                            )
+                        },
                     style = if (level == 0)
                         MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, fontSize = 19.sp)
                     else
                         MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal)
                 )
             }
+
 
             // Кнопка меню действий
             Box {
