@@ -414,15 +414,19 @@ fun TaskItem(
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = "Изменить задачу")
                         }
-                        IconButton(
-                            onClick = {
-                                showAddSubtaskField = true
-                                showOptionsMenu = false
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+
+                        if (level == 0) {
+                            IconButton(
+                                onClick = {
+                                    showAddSubtaskField = true
+                                    showOptionsMenu = false
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+                            }
                         }
+
                         IconButton(
                             onClick = {
                                 onDeleteRequest(task)
@@ -437,41 +441,46 @@ fun TaskItem(
             }
 
         }
-        if (showAddSubtaskField) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
-            ) {
-                OutlinedTextField(
-                    value = subtaskInput,
-                    onValueChange = { subtaskInput = it },
-                    placeholder = {
-                        Text(
-                            "Новая подзадача",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
-                    },
-                    modifier = Modifier.weight(1f).height(54.dp),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
-                    singleLine = true,
-                )
-                IconButton(onClick = {
-                    if (subtaskInput.text.isNotBlank()) {
-                        onAddSubtask(task, subtaskInput.text.trim())
-                        subtaskInput = TextFieldValue("")
-                        showAddSubtaskField = false
+
+
+            if ((showAddSubtaskField) && (level == 0)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = subtaskInput,
+                        onValueChange = { subtaskInput = it },
+                        placeholder = {
+                            Text(
+                                "Новая подзадача",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(54.dp),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                        singleLine = true,
+                    )
+                    IconButton(onClick = {
+                        if (subtaskInput.text.isNotBlank()) {
+                            onAddSubtask(task, subtaskInput.text.trim())
+                            subtaskInput = TextFieldValue("")
+                            showAddSubtaskField = false
+                        }
+                    }) {
+                        Icon(Icons.Default.Check, contentDescription = "Подтвердить")
                     }
-                }) {
-                    Icon(Icons.Default.Check, contentDescription = "Подтвердить")
-                }
-                IconButton(onClick = {
-                    showAddSubtaskField = false
-                    subtaskInput = TextFieldValue("")
-                }) {
-                    Icon(Icons.Default.Close, contentDescription = "Отмена")
+                    IconButton(onClick = {
+                        showAddSubtaskField = false
+                        subtaskInput = TextFieldValue("")
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "Отмена")
+                    }
                 }
             }
-        }
+
         val childCount = task.subtasks.size
         if (expanded) {
             task.subtasks.forEachIndexed { index, subtask ->
