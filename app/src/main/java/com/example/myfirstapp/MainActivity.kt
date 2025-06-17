@@ -14,21 +14,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -38,17 +24,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,16 +79,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
-import com.example.myfirstapp.ui.theme.BlueColors
-import com.example.myfirstapp.ui.theme.BrownColors
-import com.example.myfirstapp.ui.theme.GreenColors
-import com.example.myfirstapp.ui.theme.MyFirstAppTheme
-import com.example.myfirstapp.ui.theme.OrangeColors
-import com.example.myfirstapp.ui.theme.PurpleColors
-import com.example.myfirstapp.ui.theme.RedColors
-import com.example.myfirstapp.ui.theme.TealColors
-import com.example.myfirstapp.ui.theme.UniversalDarkColors
-import com.example.myfirstapp.ui.theme.YellowColors
+import com.example.myfirstapp.ui.theme.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
@@ -121,26 +88,28 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-
 // --- Data ---
 
 data class Task(
     val id: Int,
     val text: String,
     val done: Boolean,
-    val subtasks: List<Task> = emptyList()
+    val subtasks: List<Task> = emptyList(),
+    val favorite: Boolean = false        // Добавлено поле избранное
 ) {
     fun safeCopy(
         id: Int = this.id,
         text: String = this.text,
         done: Boolean = this.done,
-        subtasks: List<Task>? = this.subtasks
+        subtasks: List<Task>? = this.subtasks,
+        favorite: Boolean = this.favorite
     ): Task {
         return copy(
             id = id,
             text = text,
             done = done,
-            subtasks = subtasks ?: emptyList()
+            subtasks = subtasks ?: emptyList(),
+            favorite = favorite
         )
     }
 }
@@ -160,9 +129,11 @@ enum class SortOption(val displayName: String) {
 // --- DataStore ---
 
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
+
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
 val ACTIVE_THEME_INDEX_KEY = intPreferencesKey("active_theme_index")
 val ACTIVE_LIST_ID_KEY = intPreferencesKey("active_list_id")
+
 val gson = Gson()
 
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
@@ -231,6 +202,7 @@ class MainActivity : ComponentActivity() {
         BlueColors, UniversalDarkColors, RedColors, GreenColors,
         YellowColors, OrangeColors, PurpleColors, TealColors, BrownColors
     )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val listsState = mutableStateOf<List<TaskList>>(emptyList())
@@ -242,11 +214,13 @@ class MainActivity : ComponentActivity() {
             val savedActiveListId = applicationContext.readActiveListId().firstOrNull() ?: -1
             val listsToUse = loadedLists.ifEmpty {
                 listOf(
-                    TaskList(1, "Мои задачи", listOf(
-                        Task(1, "Купить хлеб", false),
-                        Task(2, "Позвонить маме", true),
-                        Task(3, "Сделать домашку", false)
-                    ))
+                    TaskList(
+                        1, "Мои задачи", listOf(
+                            Task(1, "Купить хлеб", false),
+                            Task(2, "Позвонить маме", true),
+                            Task(3, "Сделать домашку", false)
+                        )
+                    )
                 )
             }
             listsState.value = listsToUse
@@ -308,19 +282,20 @@ fun TaskItem(
     val lineStrokeWidth = 5f
     val itemHeight = 48.dp
     val indent = if (level < leftIndents.size) leftIndents[level] else leftIndents.last()
+
     Column(modifier = modifier.padding(start = indent)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.height(itemHeight).fillMaxWidth()
         ) {
             Box(
-                modifier = Modifier.width(if (level == 0) 0.dp else leftIndents.getOrElse(level) { 0.dp }).fillMaxHeight()
+                modifier = Modifier.width(if (level == 0) 0.dp else leftIndents.getOrElse(level) { 0.dp })
+                    .fillMaxHeight()
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val heightPx = size.height
                     val halfHeight = heightPx / 2f
                     val indentPx = indent.toPx()
-
                     if (level == 1) {
                         val x = indentPx / 2f
                         drawLine(
@@ -333,23 +308,17 @@ fun TaskItem(
                         drawLine(
                             color = lineColor,
                             strokeWidth = lineStrokeWidth,
-                            start = Offset(x,  -38f),
+                            start = Offset(x, -38f),
                             end = Offset(x, if (isLast) halfHeight else heightPx),
                             cap = StrokeCap.Round
                         )
                     }
-
                     // линия под задачей, когда подзадача свёрнута
                     if (!expanded && task.subtasks.isNotEmpty()) {
                         val verticalLengthPx = 12.dp.toPx()
                         val horizontalLengthPx = 250.dp.toPx()
-
-                        // Начальная точка — линия начинается чуть правее чекбокса
-                        // Предположим, x = 20.dp (приблизительно центр чекбокса или чуть правее)
                         val startX = indentPx + 24.dp.toPx()
-                        val startY = heightPx - 14.dp.toPx()  // чуть ниже нижней грани элемента (48dp высоты)
-
-                        // Вертикальная линия вниз
+                        val startY = heightPx - 14.dp.toPx()
                         drawLine(
                             color = lineColor,
                             strokeWidth = lineStrokeWidth,
@@ -357,7 +326,6 @@ fun TaskItem(
                             end = Offset(startX, startY + verticalLengthPx),
                             cap = StrokeCap.Round
                         )
-                        // Горизонтальная линия вправо
                         drawLine(
                             color = lineColor,
                             strokeWidth = lineStrokeWidth,
@@ -368,10 +336,12 @@ fun TaskItem(
                     }
                 }
             }
+
             Checkbox(checked = task.done, onCheckedChange = { checked ->
                 fun setDoneRec(task: Task, done: Boolean): Task {
                     return task.safeCopy(done = done, subtasks = task.subtasks.map { setDoneRec(it, done) })
                 }
+
                 val updatedTask = setDoneRec(task, checked)
                 onCheckedChange(updatedTask)
             })
@@ -380,9 +350,22 @@ fun TaskItem(
                 OutlinedTextField(
                     value = editText,
                     onValueChange = { newValue -> editText = newValue },
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done), // добавлено подтверждение Enter для редактирования
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            val newText = editText.text.trim()
+                            if (newText.isNotBlank() && newText != task.text) {
+                                onTextChange(task.copy(text = newText))
+                            }
+                            onEditingTaskChange(null)
+                            editText = TextFieldValue("")
+                        }
+                    ),
                     trailingIcon = {
                         Row {
                             IconButton(onClick = {
@@ -402,7 +385,8 @@ fun TaskItem(
                                 Icon(Icons.Default.Close, contentDescription = "Отмена")
                             }
                         }
-                    })
+                    }
+                )
             } else {
                 Text(
                     text = task.text,
@@ -422,100 +406,159 @@ fun TaskItem(
                 )
             }
 
-            // меню делаем иконки в ряд
-            Box {
-                IconButton(onClick = { showOptionsMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Меню действий задачи")
-                }
-                DropdownMenu(
-                    expanded = showOptionsMenu,
-                    onDismissRequest = { showOptionsMenu = false },
-                    modifier = Modifier
-                        .width(IntrinsicSize.Min)
-                        .height(50.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            // Показываем избранное только у top-level задач (level == 0)
+            if (level == 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            onTextChange(task.copy(favorite = !task.favorite))
+                        },
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        IconButton(
-                            onClick = {
-                                onEditingTaskChange(task.id)
-                                editText = TextFieldValue(task.text)
-                                showOptionsMenu = false
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Изменить задачу")
+                        Icon(
+                            imageVector = if (task.favorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (task.favorite) "Убрать из избранного" else "Добавить в избранное",
+                            tint = if (task.favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { showOptionsMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Меню действий задачи")
                         }
-
-                        if (level == 0) {
+                        DropdownMenu(
+                            expanded = showOptionsMenu,
+                            onDismissRequest = { showOptionsMenu = false },
+                            modifier = Modifier
+                                .width(IntrinsicSize.Min)
+                                .height(50.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        onEditingTaskChange(task.id)
+                                        editText = TextFieldValue(task.text)
+                                        showOptionsMenu = false
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Изменить задачу")
+                                }
+                                    IconButton(
+                                        onClick = {
+                                            showAddSubtaskField = true
+                                            showOptionsMenu = false
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+                                    }
+                                IconButton(
+                                    onClick = {
+                                        onDeleteRequest(task)
+                                        showOptionsMenu = false
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Удалить задачу")
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Для подзадач (level > 0) - меню, но без избранного
+                Box {
+                    IconButton(onClick = { showOptionsMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Меню действий задачи")
+                    }
+                    DropdownMenu(
+                        expanded = showOptionsMenu,
+                        onDismissRequest = { showOptionsMenu = false },
+                        modifier = Modifier
+                            .width(IntrinsicSize.Min)
+                            .height(50.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             IconButton(
                                 onClick = {
-                                    showAddSubtaskField = true
+                                    onEditingTaskChange(task.id)
+                                    editText = TextFieldValue(task.text)
                                     showOptionsMenu = false
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+                                Icon(Icons.Default.Edit, contentDescription = "Изменить задачу")
+                            }
+                            IconButton(
+                                onClick = {
+                                    onDeleteRequest(task)
+                                    showOptionsMenu = false
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить задачу")
                             }
                         }
-
-                        IconButton(
-                            onClick = {
-                                onDeleteRequest(task)
-                                showOptionsMenu = false
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Удалить задачу")
-                        }
                     }
                 }
             }
-
         }
 
-
-            if ((showAddSubtaskField) && (level == 0)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = subtaskInput,
-                        onValueChange = { subtaskInput = it },
-                        placeholder = {
-                            Text(
-                                "Новая подзадача",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(54.dp),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
-                        singleLine = true,
-                    )
-                    IconButton(onClick = {
-                        if (subtaskInput.text.isNotBlank()) {
-                            onAddSubtask(task, subtaskInput.text.trim())
-                            subtaskInput = TextFieldValue("")
-                            showAddSubtaskField = false
+        if ((showAddSubtaskField) && (level == 0)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
+            ) {
+                OutlinedTextField(
+                    value = subtaskInput,
+                    onValueChange = { subtaskInput = it },
+                    placeholder = {
+                        Text(
+                            "Новая подзадача",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(54.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (subtaskInput.text.isNotBlank()) {
+                                onAddSubtask(task, subtaskInput.text.trim())
+                                subtaskInput = TextFieldValue("")
+                                showAddSubtaskField = false
+                            }
                         }
-                    }) {
-                        Icon(Icons.Default.Check, contentDescription = "Подтвердить")
-                    }
-                    IconButton(onClick = {
-                        showAddSubtaskField = false
+                    ),
+                )
+                IconButton(onClick = {
+                    if (subtaskInput.text.isNotBlank()) {
+                        onAddSubtask(task, subtaskInput.text.trim())
                         subtaskInput = TextFieldValue("")
-                    }) {
-                        Icon(Icons.Default.Close, contentDescription = "Отмена")
+                        showAddSubtaskField = false
                     }
+                }) {
+                    Icon(Icons.Default.Check, contentDescription = "Подтвердить")
+                }
+                IconButton(onClick = {
+                    showAddSubtaskField = false
+                    subtaskInput = TextFieldValue("")
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Отмена")
                 }
             }
-
+        }
         val childCount = task.subtasks.size
         if (expanded) {
             task.subtasks.forEachIndexed { index, subtask ->
@@ -539,7 +582,6 @@ fun TaskItem(
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -567,13 +609,16 @@ fun ToDoAppScreen(
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
             taskIdPendingDelete = null
         }
     }
+
     val activeList = lists.find { it.id == activeListId }
+
     LaunchedEffect(lists) {
         if (lists.none { it.id == activeListId }) {
             val newActiveId = lists.firstOrNull()?.id ?: -1
@@ -640,7 +685,6 @@ fun ToDoAppScreen(
 
     fun deleteDoneTasks() {
         val list = activeList ?: return
-        // Удаляем только top-level задачи, у которых done == true
         val filteredTasks = list.tasks.filter { !it.done }
         val updatedList = list.copy(tasks = filteredTasks)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
@@ -679,15 +723,22 @@ fun ToDoAppScreen(
             TaskFilter.ACTIVE -> activeList.tasks.filter { !it.done }
             TaskFilter.DONE -> activeList.tasks.filter { it.done }
         }
-        return when (selectedSortOption) {
-            SortOption.A_TO_Z -> filtered.sortedBy { it.text.lowercase() }
-            SortOption.Z_TO_A -> filtered.sortedByDescending { it.text.lowercase() }
-            SortOption.NEWEST_FIRST -> filtered.sortedByDescending { it.id }
-            SortOption.OLDEST_FIRST -> filtered.sortedBy { it.id }
-            SortOption.UNCOMPLETED_FIRST -> filtered.sortedWith(
+
+        // Избранное только у top-level задач, подзадачи без избранного
+        val favoriteTasks = filtered.filter { it.favorite }
+        val normalTasks = filtered.filter { !it.favorite }
+
+        val sortedNormal = when (selectedSortOption) {
+            SortOption.A_TO_Z -> normalTasks.sortedBy { it.text.lowercase() }
+            SortOption.Z_TO_A -> normalTasks.sortedByDescending { it.text.lowercase() }
+            SortOption.NEWEST_FIRST -> normalTasks.sortedByDescending { it.id }
+            SortOption.OLDEST_FIRST -> normalTasks.sortedBy { it.id }
+            SortOption.UNCOMPLETED_FIRST -> normalTasks.sortedWith(
                 compareBy<Task> { it.done }.thenBy { it.text.lowercase() }
             )
         }
+
+        return favoriteTasks + sortedNormal
     }
 
     fun onDeleteIconClick(task: Task) {
@@ -713,13 +764,16 @@ fun ToDoAppScreen(
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier
-                    .fillMaxHeight(0.9f)
+                    .fillMaxHeight() // Исправлено - максимальная высота меню
                     .padding(vertical = 8.dp)
                     .background(MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(16.dp))
             ) {
                 Column(modifier = Modifier.fillMaxHeight()) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .height(86.dp),     // высота шапки 86.dp согласно задаче
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -754,7 +808,7 @@ fun ToDoAppScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    .clip(RoundedCornerShape(12.dp))  // Закругляем углы
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
                                         else MaterialTheme.colorScheme.surface
@@ -856,6 +910,7 @@ fun ToDoAppScreen(
                     },
                     actions = {
                     },
+                    modifier = Modifier.height(86.dp), // Высота шапки 86dp
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -873,6 +928,7 @@ fun ToDoAppScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
                     ) {
                         Spacer(Modifier.height(16.dp))
+
                         OutlinedTextField(
                             value = input,
                             onValueChange = { input = it },
@@ -901,68 +957,86 @@ fun ToDoAppScreen(
                             },
                             keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(
-                                onDone = {
-                                    addTask(input.text)
-                                }
+                                onDone = { addTask(input.text) }
                             )
                         )
                         Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            FilterChip(
-                                selected = filter == TaskFilter.ALL,
-                                onClick = { filter = TaskFilter.ALL },
-                                label = { Text("Все") },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            FilterChip(
-                                selected = filter == TaskFilter.ACTIVE,
-                                onClick = { filter = TaskFilter.ACTIVE },
-                                label = { Text("Активные") },
-                                leadingIcon = { Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null) },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            FilterChip(
-                                selected = filter == TaskFilter.DONE,
-                                onClick = { filter = TaskFilter.DONE },
-                                label = { Text("Выполненные") },
-                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) }
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+
+                        Column(
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Сортировка:", modifier = Modifier.padding(end = 8.dp))
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = { sortExpanded = true },
-                                    modifier = Modifier.fillMaxWidth()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = filter == TaskFilter.ALL,
+                                    onClick = { filter = TaskFilter.ALL },
+                                    label = { Text("Все") },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                                    modifier = Modifier.weight(1f).height(40.dp)
+                                )
+
+                                FilterChip(
+                                    selected = filter == TaskFilter.ACTIVE,
+                                    onClick = { filter = TaskFilter.ACTIVE },
+                                    label = { Text("Активные") },
+                                    leadingIcon = { Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null) },
+                                    modifier = Modifier.weight(1f).height(40.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(40.dp)
                                 ) {
-                                    Text(selectedSortOption.displayName, modifier = Modifier.weight(1f))
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                                }
-                                DropdownMenu(
-                                    expanded = sortExpanded,
-                                    onDismissRequest = { sortExpanded = false }
-                                ) {
-                                    SortOption.entries.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { Text(option.displayName) },
-                                            onClick = {
-                                                selectedSortOption = option
-                                                sortExpanded = false
-                                            }
+                                    OutlinedButton(
+                                        onClick = { sortExpanded = true },
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Text(
+                                            selectedSortOption.displayName,
+                                            modifier = Modifier.weight(1f)
                                         )
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                    DropdownMenu(
+                                        expanded = sortExpanded,
+                                        onDismissRequest = { sortExpanded = false }
+                                    ) {
+                                        SortOption.entries.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text(option.displayName) },
+                                                onClick = {
+                                                    selectedSortOption = option
+                                                    sortExpanded = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
+
+                                FilterChip(
+                                    selected = filter == TaskFilter.DONE,
+                                    onClick = { filter = TaskFilter.DONE },
+                                    label = { Text("Выполненные") },
+                                    leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                                    modifier = Modifier.weight(1f).height(40.dp)
+                                )
                             }
                         }
+
+
                         Spacer(Modifier.height(4.dp))
+
                         if (activeList == null) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -976,6 +1050,7 @@ fun ToDoAppScreen(
                             }
                             return@Column
                         }
+
                         if (activeList.tasks.any { it.done }) {
                             Button(
                                 onClick = { showDeleteDoneDialog = true },
@@ -988,7 +1063,9 @@ fun ToDoAppScreen(
                             }
                             Spacer(Modifier.height(4.dp))
                         }
+
                         val displayedTasks = filteredSortedTasks()
+
                         if (displayedTasks.isEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -1031,6 +1108,7 @@ fun ToDoAppScreen(
             }
         )
     }
+
     // Диалоги
     if (showDeleteDoneDialog) {
         AlertDialog(
