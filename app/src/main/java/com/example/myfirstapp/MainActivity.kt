@@ -609,6 +609,7 @@ fun ToDoAppScreen(
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
+    var showMenuInfoDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
@@ -754,9 +755,7 @@ fun ToDoAppScreen(
     }
 
     fun showMenuInfo() {
-        scope.launch {
-            snackbarHostState.showSnackbar("Свайпните для открытия или закрытия меню")
-        }
+        showMenuInfoDialog = true
     }
 
     ModalNavigationDrawer(
@@ -1110,6 +1109,20 @@ fun ToDoAppScreen(
     }
 
     // Диалоги
+    if (showMenuInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showMenuInfoDialog = false },
+            title = { Text("Информация") },
+            text = { Text("• Свайпните для открытия или закрытия меню\n" +
+                    "• Нажмите два раза по задаче для того, чтобы свернуть или развернуть подзадачи") },
+            confirmButton = {
+                TextButton(onClick = { showMenuInfoDialog = false }) {
+                    Text("ОК")
+                }
+            }
+        )
+    }
+
     if (showDeleteDoneDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDoneDialog = false },
