@@ -83,7 +83,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -115,8 +115,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+
 
 // --- Data ---
+
 data class Task(
     val id: Int,
     val text: String,
@@ -137,8 +141,11 @@ data class Task(
         )
     }
 }
+
 data class TaskList(val id: Int, val name: String, val tasks: List<Task>)
+
 enum class TaskFilter { ALL, ACTIVE, DONE }
+
 enum class SortOption(val displayName: String) {
     A_TO_Z("А-Я"),
     Z_TO_A("Я-А"),
@@ -146,16 +153,20 @@ enum class SortOption(val displayName: String) {
     OLDEST_FIRST("Сначала старые"),
     UNCOMPLETED_FIRST("Сначала невыполненные")
 }
+
 // --- DataStore ---
+
 val Context.dataStore by preferencesDataStore(name = "tasks_datastore")
 val TASK_LISTS_KEY = stringPreferencesKey("task_lists_json")
 val ACTIVE_THEME_INDEX_KEY = intPreferencesKey("active_theme_index")
 val ACTIVE_LIST_ID_KEY = intPreferencesKey("active_list_id")
 val gson = Gson()
+
 suspend fun Context.saveTaskLists(lists: List<TaskList>) {
     val json = gson.toJson(lists)
     dataStore.edit { prefs -> prefs[TASK_LISTS_KEY] = json }
 }
+
 fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
     .map { prefs ->
         val json = prefs[TASK_LISTS_KEY] ?: "[]"
@@ -163,18 +174,23 @@ fun Context.loadTaskLists(): Flow<List<TaskList>> = dataStore.data
         val lists: List<TaskList> = gson.fromJson(json, type)
         lists.map { taskList -> taskList.copy(tasks = fixTasks(taskList.tasks)) }
     }
+
 suspend fun Context.saveActiveThemeIndex(index: Int) {
     dataStore.edit { prefs -> prefs[ACTIVE_THEME_INDEX_KEY] = index }
 }
+
 fun Context.readActiveThemeIndex(): Flow<Int> = dataStore.data
     .map { prefs -> prefs[ACTIVE_THEME_INDEX_KEY] ?: 0 }
+
 suspend fun Context.saveActiveListId(id: Int) {
     dataStore.edit { prefs -> prefs[ACTIVE_LIST_ID_KEY] = id }
 }
+
 fun Context.readActiveListId(): Flow<Int> = dataStore.data
     .map { prefs -> prefs[ACTIVE_LIST_ID_KEY] ?: -1 }
 
 // --- Helpers ---
+
 fun fixTasks(tasks: List<Task>?): List<Task> {
     if (tasks == null) return emptyList()
     return tasks.map { task -> task.safeCopy(subtasks = fixTasks(task.subtasks)) }
@@ -186,10 +202,12 @@ fun updateTaskInList(tasks: List<Task>, updatedTask: Task): List<Task> {
         else task.safeCopy(subtasks = updateTaskInList(task.subtasks, updatedTask))
     }
 }
+
 fun deleteTaskFromList(tasks: List<Task>, taskId: Int): List<Task> {
     return tasks.filter { it.id != taskId }
         .map { it.safeCopy(subtasks = deleteTaskFromList(it.subtasks, taskId)) }
 }
+
 fun collectAllIds(task: Task): List<Int> {
     return listOf(task.id) + task.subtasks.flatMap { collectAllIds(it) }
 }
@@ -204,6 +222,7 @@ fun propagateTaskDoneState(tasks: List<Task>): List<Task> {
 }
 
 // --- MainActivity ---
+
 class MainActivity : ComponentActivity() {
     private val themeList = listOf(
         BlueColors, UniversalDarkColors, RedColors, GreenColors,
@@ -256,6 +275,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- UI ---
+
 @Composable
 fun TaskItem(
     task: Task,
@@ -276,11 +296,14 @@ fun TaskItem(
     var editText by remember { mutableStateOf(TextFieldValue(task.text)) }
     var showAddSubtaskField by remember { mutableStateOf(false) }
     var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
+    var expanded by remember { mutableStateOf(true) }
+
     val isEditing = (editingTaskId == task.id)
     val lineColor = MaterialTheme.colorScheme.primary
     val lineStrokeWidth = 5f
     val itemHeight = 48.dp
     val indent = if (level < leftIndents.size) leftIndents[level] else leftIndents.last()
+
     Column(modifier = modifier.padding(start = indent)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -313,6 +336,21 @@ fun TaskItem(
                 val updatedTask = setDoneRec(task, checked)
                 onCheckedChange(updatedTask)
             })
+
+            if (task.subtasks.isNotEmpty()) {
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowDropDown,
+                        contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                        modifier = Modifier.graphicsLayer {
+                            rotationZ = if (expanded) 0f else -90f
+                        }
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(40.dp))
+            }
+
             if (isEditing) {
                 OutlinedTextField(
                     value = editText,
@@ -328,6 +366,7 @@ fun TaskItem(
                                     onTextChange(task.copy(text = newText))
                                 }
                                 onEditingTaskChange(null)
+                                editText = TextFieldValue("") // Очистка после сохранения
                             }) {
                                 Icon(Icons.Default.Check, contentDescription = "Сохранить")
                             }
@@ -379,7 +418,7 @@ fun TaskItem(
                 IconButton(onClick = {
                     if (subtaskInput.text.isNotBlank()) {
                         onAddSubtask(task, subtaskInput.text.trim())
-                        subtaskInput = TextFieldValue("")
+                        subtaskInput = TextFieldValue("")  // Очистка после добавления подзадачи
                         showAddSubtaskField = false
                     }
                 }) {
@@ -394,23 +433,26 @@ fun TaskItem(
             }
         }
         val childCount = task.subtasks.size
-        task.subtasks.forEachIndexed { index, subtask ->
-            val hasNextSibling = index < childCount - 1
-            TaskItem(
-                task = subtask,
-                onCheckedChange = onCheckedChange,
-                onDeleteRequest = onDeleteRequest,
-                onAddSubtask = onAddSubtask,
-                onTextChange = onTextChange,
-                taskIdPendingDelete = taskIdPendingDelete,
-                onDeleteIconClick = onDeleteIconClick,
-                editingTaskId = editingTaskId,
-                onEditingTaskChange = onEditingTaskChange,
-                level = level + 1,
-                isLast = !hasNextSibling,
-                hasNextSiblingAtLevel = hasNextSiblingAtLevel + hasNextSibling,
-                leftIndents = leftIndents
-            )
+
+        if (expanded) {
+            task.subtasks.forEachIndexed { index, subtask ->
+                val hasNextSibling = index < childCount - 1
+                TaskItem(
+                    task = subtask,
+                    onCheckedChange = onCheckedChange,
+                    onDeleteRequest = onDeleteRequest,
+                    onAddSubtask = onAddSubtask,
+                    onTextChange = onTextChange,
+                    taskIdPendingDelete = taskIdPendingDelete,
+                    onDeleteIconClick = onDeleteIconClick,
+                    editingTaskId = editingTaskId,
+                    onEditingTaskChange = onEditingTaskChange,
+                    level = level + 1,
+                    isLast = !hasNextSibling,
+                    hasNextSiblingAtLevel = hasNextSiblingAtLevel + hasNextSibling,
+                    leftIndents = leftIndents
+                )
+            }
         }
     }
 }
@@ -428,10 +470,8 @@ fun ToDoAppScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-
     var editingTaskId by remember { mutableStateOf<Int?>(null) }
     var showDeleteDoneDialog by remember { mutableStateOf(false) }
     var showAddListDialog by remember { mutableStateOf(false) }
@@ -443,16 +483,13 @@ fun ToDoAppScreen(
     var selectedSortOption by remember { mutableStateOf(SortOption.A_TO_Z) }
     var sortExpanded by remember { mutableStateOf(false) }
     var taskIdPendingDelete by remember { mutableStateOf<Int?>(null) }
-
     LaunchedEffect(taskIdPendingDelete) {
         if (taskIdPendingDelete != null) {
             delay(2000)
             taskIdPendingDelete = null
         }
     }
-
     val activeList = lists.find { it.id == activeListId }
-
     LaunchedEffect(lists) {
         if (lists.none { it.id == activeListId }) {
             val newActiveId = lists.firstOrNull()?.id ?: -1
@@ -471,7 +508,7 @@ fun ToDoAppScreen(
         val updatedList = activeList.copy(tasks = currentTasks + newTask)
         val updatedLists = lists.map { if (it.id == activeListId) updatedList else it }
         onListsChange(updatedLists)
-        input = TextFieldValue("")
+        input = TextFieldValue("")  // Очистка после добавления задачи
         focusManager.clearFocus()
         keyboardController?.hide()
         editingTaskId = null
@@ -581,7 +618,6 @@ fun ToDoAppScreen(
         }
     }
 
-    // Для кнопки info в меню
     fun showMenuInfo() {
         scope.launch {
             snackbarHostState.showSnackbar("Свайпните для открытия или закрытия меню")
@@ -633,16 +669,17 @@ fun ToDoAppScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))  // Закругляем углы
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                        else MaterialTheme.colorScheme.surface
+                                    )
                                     .clickable {
                                         onActiveListIdChange(list.id)
                                         editingTaskId = null
                                         scope.launch { drawerState.close() }
                                     }
-                                    .padding(horizontal = 8.dp)
-                                    .background(
-                                        if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                                        else MaterialTheme.colorScheme.surface
-                                    )
                             )
                         }
                         item {
@@ -656,7 +693,9 @@ fun ToDoAppScreen(
                                         editingTaskId = null
                                         scope.launch { drawerState.close() }
                                     }
-                                    .padding(horizontal = 8.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
                             )
                         }
                     }
@@ -750,7 +789,6 @@ fun ToDoAppScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
                     ) {
                         Spacer(Modifier.height(16.dp))
-
                         OutlinedTextField(
                             value = input,
                             onValueChange = { input = it },
@@ -784,9 +822,7 @@ fun ToDoAppScreen(
                                 }
                             )
                         )
-
                         Spacer(Modifier.height(4.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -813,7 +849,6 @@ fun ToDoAppScreen(
                             )
                         }
                         Spacer(Modifier.height(4.dp))
-
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -844,7 +879,6 @@ fun ToDoAppScreen(
                             }
                         }
                         Spacer(Modifier.height(4.dp))
-
                         if (activeList == null) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -870,7 +904,6 @@ fun ToDoAppScreen(
                             }
                             Spacer(Modifier.height(4.dp))
                         }
-
                         val displayedTasks = filteredSortedTasks()
                         if (displayedTasks.isEmpty()) {
                             Box(
@@ -972,7 +1005,7 @@ fun ToDoAppScreen(
                     onClick = {
                         addTaskList(newListName.text)
                         showAddListDialog = false
-                        newListName = TextFieldValue("")
+                        newListName = TextFieldValue("")  // Очистка после добавления списка
                     },
                     enabled = newListName.text.isNotBlank()
                 ) { Text("Добавить") }
