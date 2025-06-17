@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -298,6 +299,8 @@ fun TaskItem(
     var subtaskInput by remember { mutableStateOf(TextFieldValue("")) }
     var expanded by remember { mutableStateOf(true) }
 
+    // Управление меню с опциями
+    var showOptionsMenu by remember { mutableStateOf(false) }
     val isEditing = (editingTaskId == task.id)
     val lineColor = MaterialTheme.colorScheme.primary
     val lineStrokeWidth = 5f
@@ -336,7 +339,6 @@ fun TaskItem(
                 val updatedTask = setDoneRec(task, checked)
                 onCheckedChange(updatedTask)
             })
-
             if (task.subtasks.isNotEmpty()) {
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(
@@ -366,7 +368,7 @@ fun TaskItem(
                                     onTextChange(task.copy(text = newText))
                                 }
                                 onEditingTaskChange(null)
-                                editText = TextFieldValue("") // Очистка после сохранения
+                                editText = TextFieldValue("")
                             }) {
                                 Icon(Icons.Default.Check, contentDescription = "Сохранить")
                             }
@@ -379,37 +381,64 @@ fun TaskItem(
                         }
                     })
             } else {
-                Text(text = task.text,
-                    modifier = Modifier.weight(1f).clickable {
-                        onEditingTaskChange(task.id)
-                        editText = TextFieldValue(task.text)
-                    },
+                Text(
+                    text = task.text,
+                    modifier = Modifier.weight(1f), // убираем clickable с текста
                     style = if (level == 0)
                         MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, fontSize = 19.sp)
                     else
                         MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Normal)
                 )
             }
-            if (level == 0) {
-                IconButton(onClick = { showAddSubtaskField = !showAddSubtaskField }) {
-                    Icon(Icons.Default.Add, contentDescription = "Добавить подзадачу")
+
+            // Кнопка меню действий
+            Box {
+                IconButton(onClick = { showOptionsMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Меню действий задачи")
+                }
+                DropdownMenu(
+                    expanded = showOptionsMenu,
+                    onDismissRequest = { showOptionsMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Изменить") },
+                        onClick = {
+                            onEditingTaskChange(task.id)
+                            editText = TextFieldValue(task.text)
+                            showOptionsMenu = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Добавить подзадачу") },
+                        onClick = {
+                            showAddSubtaskField = true
+                            showOptionsMenu = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Удалить") },
+                        onClick = {
+                            onDeleteRequest(task)
+                            showOptionsMenu = false
+                        }
+                    )
                 }
             }
-            IconButton(onClick = { onDeleteIconClick(task) }) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Удалить задачу",
-                    tint = if (taskIdPendingDelete == task.id) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
+
         if (showAddSubtaskField) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 32.dp + indent, bottom = 8.dp)
+            ) {
                 OutlinedTextField(
                     value = subtaskInput,
                     onValueChange = { subtaskInput = it },
                     placeholder = {
-                        Text("Новая подзадача", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                        Text(
+                            "Новая подзадача",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
                     },
                     modifier = Modifier.weight(1f).height(54.dp),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
@@ -418,7 +447,7 @@ fun TaskItem(
                 IconButton(onClick = {
                     if (subtaskInput.text.isNotBlank()) {
                         onAddSubtask(task, subtaskInput.text.trim())
-                        subtaskInput = TextFieldValue("")  // Очистка после добавления подзадачи
+                        subtaskInput = TextFieldValue("")
                         showAddSubtaskField = false
                     }
                 }) {
@@ -432,8 +461,8 @@ fun TaskItem(
                 }
             }
         }
-        val childCount = task.subtasks.size
 
+        val childCount = task.subtasks.size
         if (expanded) {
             task.subtasks.forEachIndexed { index, subtask ->
                 val hasNextSibling = index < childCount - 1
@@ -456,6 +485,8 @@ fun TaskItem(
         }
     }
 }
+
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
