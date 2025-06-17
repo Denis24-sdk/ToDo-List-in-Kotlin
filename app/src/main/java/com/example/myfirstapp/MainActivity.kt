@@ -320,16 +320,51 @@ fun TaskItem(
                     val heightPx = size.height
                     val halfHeight = heightPx / 2f
                     val indentPx = indent.toPx()
+
                     if (level == 1) {
                         val x = indentPx / 2f
-                        drawLine(color = lineColor, strokeWidth = lineStrokeWidth,
+                        drawLine(
+                            color = lineColor,
+                            strokeWidth = lineStrokeWidth,
                             start = Offset(x, halfHeight),
                             end = Offset(indentPx + 37f, halfHeight),
-                            cap = StrokeCap.Round)
-                        drawLine(color = lineColor, strokeWidth = lineStrokeWidth,
-                            start = Offset(x, if (isLast) -35f else -35f),
+                            cap = StrokeCap.Round
+                        )
+                        drawLine(
+                            color = lineColor,
+                            strokeWidth = lineStrokeWidth,
+                            start = Offset(x,  -38f),
                             end = Offset(x, if (isLast) halfHeight else heightPx),
-                            cap = StrokeCap.Round)
+                            cap = StrokeCap.Round
+                        )
+                    }
+
+                    // линия под задачей, когда подзадача свёрнута
+                    if (!expanded && task.subtasks.isNotEmpty()) {
+                        val verticalLengthPx = 12.dp.toPx()
+                        val horizontalLengthPx = 250.dp.toPx()
+
+                        // Начальная точка — линия начинается чуть правее чекбокса
+                        // Предположим, x = 20.dp (приблизительно центр чекбокса или чуть правее)
+                        val startX = indentPx + 24.dp.toPx()
+                        val startY = heightPx - 14.dp.toPx()  // чуть ниже нижней грани элемента (48dp высоты)
+
+                        // Вертикальная линия вниз
+                        drawLine(
+                            color = lineColor,
+                            strokeWidth = lineStrokeWidth,
+                            start = Offset(startX, startY),
+                            end = Offset(startX, startY + verticalLengthPx),
+                            cap = StrokeCap.Round
+                        )
+                        // Горизонтальная линия вправо
+                        drawLine(
+                            color = lineColor,
+                            strokeWidth = lineStrokeWidth,
+                            start = Offset(startX, startY + verticalLengthPx),
+                            end = Offset(startX + horizontalLengthPx, startY + verticalLengthPx),
+                            cap = StrokeCap.Round
+                        )
                     }
                 }
             }
